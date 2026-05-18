@@ -1,0 +1,7 @@
+{
+  "callable": "ExampleApp",
+  "name": "SpaceTeam",
+  "category": "unknown",
+  "hidden": false,
+  "path": "apps.spaceteam.app"
+}
