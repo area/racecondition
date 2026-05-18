@@ -27,6 +27,7 @@ class ExampleApp(app.App):
         self.menu = None
         self.show_clock = False
         self.clock_started_at = time.time()
+        self.hexpansions = {}
         self.text = "No hexpansion found."
         self.color = (1, 0, 0)
         self.notification = None
@@ -101,15 +102,39 @@ class ExampleApp(app.App):
 
     def _draw_status_text(self, ctx):
         lines = self.text.split("\n")
-        start_y = -70
+        start_y = -80
         line_spacing = 18
 
         ctx.text_align = ctx.CENTER
         ctx.text_baseline = ctx.MIDDLE
         ctx.font_size = 16
 
-        for index, line in enumerate(lines[:4]):
+        for index, line in enumerate(lines[:8]):
             ctx.move_to(0, start_y + (index * line_spacing)).text(line)
+
+    def _refresh_status_text(self):
+        if not self.hexpansions:
+            self.color = (1, 0, 0)
+            self.text = "No hexpansion found."
+            return
+
+        self.color = (0, 1, 0)
+        lines = ["Connected hexpansions:"]
+
+        for port in sorted(self.hexpansions):
+            item = self.hexpansions[port]
+            if item["known"]:
+                lines.append("p{}: {}".format(port, item["name"]))
+            else:
+                lines.append(
+                    "p{}: unknown {}:{}".format(
+                        port,
+                        item["vid_hex"],
+                        item["pid_hex"],
+                    )
+                )
+
+        self.text = "\n".join(lines)
 
     def update(self, delta):
         if self.button_states.get(BUTTON_TYPES["CANCEL"]):
@@ -143,7 +168,7 @@ class ExampleApp(app.App):
         ctx.restore()
 
     def scan_for_hexpansion(self):
-        found = False
+        connected = {}
 
         for port in range(1, 7):
             print(f"Searching for hexpansion on port: {port}")
@@ -164,17 +189,27 @@ class ExampleApp(app.App):
 
             header = read_hexpansion_header(i2c, addr, addr_len=addr_len)
             if header is None:
-                self.text = "Hexp. found.\n No header data."
+                connected[port] = {
+                    "name": "Unknown (no header)",
+                    "known": False,
+                    "vid_hex": "n/a",
+                    "pid_hex": "n/a",
+                }
                 continue
             else:
                 print("Read header: " + str(header))
-            friendly_name = get_friendly_name(header.vid, header.pid)
-            if not friendly_name:
-                friendly_name = "Unknown"
 
-            self.text = "name: {}\nvid: {}\npid: {}\nport: {}".format(
-                friendly_name, hex(header.vid), hex(header.pid), port)
-            found = True
+            friendly_name = get_friendly_name(header.vid, header.pid)
+            vid_hex = hex(header.vid)
+            pid_hex = hex(header.pid)
+            known = friendly_name is not None
+
+            connected[port] = {
+                "name": friendly_name or "Unknown",
+                "known": known,
+                "vid_hex": vid_hex,
+                "pid_hex": pid_hex,
+            }
 
             # # Swap 0xCAFE with your EEPROM header vid
             # # Swap 0xCAFF with your EEPROM header pid
@@ -186,8 +221,7 @@ class ExampleApp(app.App):
             hexpansionConfig = HexpansionConfig(port)
             print("Hexpansion config: " + str(hexpansionConfig))
 
-        if not found:
-            self.color = (1, 0, 0)
-            self.text = "No hexpansion found."
+        self.hexpansions = connected
+        self._refresh_status_text()
 
         return None
