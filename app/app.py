@@ -4,7 +4,7 @@ import time
 from machine import I2C
 
 from app_components import Menu, clear_background, Notification
-from events.input import Buttons, BUTTON_TYPES
+from events.input import Buttons, BUTTON_TYPES, ButtonDownEvent, ButtonUpEvent
 from system.eventbus import eventbus
 from system.hexpansion.events import \
     HexpansionRemovalEvent, HexpansionInsertionEvent
@@ -17,8 +17,14 @@ try:
 except ImportError:
     from hexpansion_names import get_friendly_name
 
+try:
+    from .hexpansion import get_connected_modules
+except ImportError:
+    from hexpansion import get_connected_modules
+
 
 MAIN_MENU_ITEMS = ["Start Game", "Quit"]
+CANCEL_HOLD_TO_EXIT_MS = 4000
 
 
 class ExampleApp(app.App):
@@ -26,8 +32,13 @@ class ExampleApp(app.App):
         self.button_states = Buttons(self)
         self.menu = None
         self.show_clock = False
+        self.cancel_hold_started_ms = None
         self.clock_started_at = time.time()
+        self.connected_modules = []
         self.hexpansions = {}
+        self.current_command = None
+        self.last_result = None
+        self.last_result_count = 0
         self.text = "No hexpansion found."
         self.color = (1, 0, 0)
         self.notification = None
@@ -41,6 +52,14 @@ class ExampleApp(app.App):
         eventbus.on(
             HexpansionRemovalEvent,
             self.handle_hexpansion_removal,
+            self)
+        eventbus.on(
+            ButtonDownEvent,
+            self.handle_button_down,
+            self)
+        eventbus.on(
+            ButtonUpEvent,
+            self.handle_button_up,
             self)
 
     def handle_hexpansion_insertion(self, event):
@@ -69,6 +88,113 @@ class ExampleApp(app.App):
             HexpansionRemovalEvent,
             self.handle_hexpansion_removal,
             self)
+        eventbus.remove(
+            ButtonDownEvent,
+            self.handle_button_down,
+            self)
+        eventbus.remove(
+            ButtonUpEvent,
+            self.handle_button_up,
+            self)
+
+    def _has_known_hexpansion(self):
+        for item in self.hexpansions.values():
+            if item["known"]:
+                return True
+        return False
+
+    def _get_available_commands(self):
+        commands = []
+        seen = set()
+        for module in self.connected_modules:
+            for command in module.get_supported_commands():
+                key = command.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                commands.append(key)
+        return commands
+
+    def _ensure_command(self):
+        available = self._get_available_commands()
+        if not available:
+            self.current_command = None
+            return
+
+        if self.current_command is None or self.current_command not in available:
+            self.current_command = self._choose_next_command(available)
+
+    def _choose_next_command(self, available_commands):
+        if not available_commands:
+            return None
+        module = self.connected_modules[0]
+        if hasattr(module, "choose_command"):
+            chosen = module.choose_command()
+            if chosen in available_commands:
+                return chosen
+        return available_commands[0]
+
+    def _get_command_from_event(self, event):
+        for module in self.connected_modules:
+            command = module.get_command_from_event(event)
+            if command:
+                return command.lower()
+        return None
+
+    def _is_cancel_button(self, event):
+        button = event.button.parent
+        if event.button.parent is None:
+            button = event.button
+        return "cancel" == button.name.lower()
+
+
+    def handle_button_down(self, event):
+        if self._is_cancel_button(event):
+            print("Cancel button pressed.")
+            if self.show_clock and self.cancel_hold_started_ms is None:
+                print("Starting cancel hold timer.")
+                self.cancel_hold_started_ms = time.ticks_ms()
+
+
+        if not self.show_clock:
+            return
+
+        if not self._has_known_hexpansion():
+            return
+
+        if not self.connected_modules:
+            return
+        print("Button down event received.")
+        print(event)
+        pressed_command = self._get_command_from_event(event)
+        print(f"Command from event: {pressed_command}")
+        if not pressed_command:
+            return
+
+        self._ensure_command()
+        if not self.current_command:
+            return
+        expected = self.current_command.lower()
+
+        if pressed_command == expected:
+            result = "yes"
+        else:
+            result = "no"
+
+        if result == self.last_result:
+            self.last_result_count += 1
+        else:
+            self.last_result = result
+            self.last_result_count = 1
+
+        self.current_command = self._choose_next_command(self._get_available_commands())
+        self._refresh_status_text()
+
+    def handle_button_up(self, event):
+        if not self._is_cancel_button(event):
+            return
+
+        self.cancel_hold_started_ms = None
 
     def _set_menu(self):
         if self.menu:
@@ -90,6 +216,8 @@ class ExampleApp(app.App):
             self.minimise()
 
     def back_handler(self):
+        print("back handler called")
+        return
         self._cleanup()
         self.button_states.clear()
         self.minimise()
@@ -109,12 +237,20 @@ class ExampleApp(app.App):
         ctx.text_baseline = ctx.MIDDLE
         ctx.font_size = 16
 
+        base_color = self.color
         for index, line in enumerate(lines[:8]):
+            if line.strip().lower().startswith("no"):
+                ctx.rgb(1, 0, 0)
+            else:
+                ctx.rgb(*base_color)
             ctx.move_to(0, start_y + (index * line_spacing)).text(line)
 
     def _refresh_status_text(self):
         if not self.hexpansions:
             self.color = (1, 0, 0)
+            self.current_command = None
+            self.last_result = None
+            self.last_result_count = 0
             self.text = "No hexpansion found."
             return
 
@@ -134,17 +270,34 @@ class ExampleApp(app.App):
                     )
                 )
 
+        if self._has_known_hexpansion():
+            if self.connected_modules:
+                self._ensure_command()
+                lines.append("cmd: {}".format(self.current_command))
+                if self.last_result:
+                    lines.append(
+                        "{} (x{})".format(
+                            self.last_result,
+                            self.last_result_count,
+                        )
+                    )
+            else:
+                lines.append("cmd: waiting for supported module")
+        else:
+            self.current_command = None
+            self.last_result = None
+            self.last_result_count = 0
+
         self.text = "\n".join(lines)
 
     def update(self, delta):
-        if self.button_states.get(BUTTON_TYPES["CANCEL"]):
-            if self.show_clock:
-                self.show_clock = False
-                self.button_states.clear()
-            else:
-                self._cleanup()
-                self.button_states.clear()
-                self.minimise()
+        if self.show_clock:
+            if self.cancel_hold_started_ms is not None:
+                now_ms = time.ticks_ms()
+                held_ms = time.ticks_diff(now_ms, self.cancel_hold_started_ms)
+                if held_ms >= CANCEL_HOLD_TO_EXIT_MS:
+                    self.show_clock = False
+                    return
 
         if self.menu and not self.show_clock:
             self.menu.update(delta)
@@ -222,6 +375,7 @@ class ExampleApp(app.App):
             print("Hexpansion config: " + str(hexpansionConfig))
 
         self.hexpansions = connected
+        self.connected_modules = get_connected_modules(self.hexpansions)
         self._refresh_status_text()
 
         return None
