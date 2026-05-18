@@ -1,0 +1,4 @@
+[submodule "hexpansion-firmwares"]
+	path = hexpansion-firmwares
+	url = https://github.com/emfcamp/hexpansion-firmwares.git
+	branch = main

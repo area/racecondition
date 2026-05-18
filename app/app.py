@@ -12,6 +12,11 @@ from system.hexpansion.config import HexpansionConfig
 
 from system.hexpansion.util import read_hexpansion_header, detect_eeprom_addr
 
+try:
+    from .hexpansion_names import get_friendly_name
+except ImportError:
+    from hexpansion_names import get_friendly_name
+
 
 MAIN_MENU_ITEMS = ["Start Game", "Quit"]
 
@@ -163,8 +168,12 @@ class ExampleApp(app.App):
                 continue
             else:
                 print("Read header: " + str(header))
-            self.text = "Hexp. found.\nvid: {}\npid: {}\nat port: {}".format(
-                hex(header.vid), hex(header.pid), port)
+            friendly_name = get_friendly_name(header.vid, header.pid)
+            if not friendly_name:
+                friendly_name = "Unknown"
+
+            self.text = "name: {}\nvid: {}\npid: {}\nport: {}".format(
+                friendly_name, hex(header.vid), hex(header.pid), port)
             found = True
 
             # # Swap 0xCAFE with your EEPROM header vid
