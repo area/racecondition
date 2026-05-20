@@ -1,4 +1,4 @@
-from .MegaDrive import MegaDriveModule
+from .MegaDrive import CommandStatus, MegaDriveModule
 
 
 MODULES = [
@@ -12,3 +12,6 @@ def get_connected_modules(hexpansions):
 		if module.is_connected(hexpansions):
 			connected.append(module)
 	return connected
+
+
+__all__ = ["MegaDriveModule", "CommandStatus", "get_connected_modules"]

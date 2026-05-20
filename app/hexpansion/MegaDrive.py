@@ -1,9 +1,20 @@
 import random
+from system.eventbus import eventbus
+from events.input import Buttons, BUTTON_TYPES, ButtonDownEvent, ButtonUpEvent
+
+class CommandStatus:
+    PASSED = "passed"
+    FAILED = "failed"
+    WAITING = "waiting"
 
 
 class MegaDriveModule:
     FRIENDLY_NAME = "MegaDrive"
     COMMAND_OPTIONS = ["start", "a", "up", "down", "left", "right", "b", "c"]
+
+    def __init__(self):
+        self.current_command = None
+        self.last_status = CommandStatus.WAITING
 
     def is_connected(self, hexpansions):
         for item in hexpansions.values():
@@ -11,8 +22,10 @@ class MegaDriveModule:
                 return True
         return False
 
-    def choose_command(self):
-        return random.choice(self.COMMAND_OPTIONS)
+    def generate_command(self):
+        """Generate a new random command and set it as current."""
+        self.current_command = random.choice(self.COMMAND_OPTIONS)
+        return self.current_command
 
     def get_supported_commands(self):
         return list(self.COMMAND_OPTIONS)
@@ -23,11 +36,39 @@ class MegaDriveModule:
         valid = tuple(command.upper() for command in self.COMMAND_OPTIONS)
         return button_name.upper() in valid
 
-    def get_command_from_event(self, event):
+    def on_button_down(self, event):
+        """App calls this when a button is pressed (app handles routing)."""
+        status = self._validate_button(event)
+        if status != CommandStatus.WAITING:
+            self.last_status = status
+
+    def _validate_button(self, event):
+        """Validate a button press against current command."""
+        if self.current_command is None:
+            return CommandStatus.WAITING
+
         button_name = self.get_button_name(event)
-        if not self.is_supported_command(button_name):
-            return None
-        return button_name.lower()
+        if button_name is None:
+            return CommandStatus.WAITING
+
+        button_lower = button_name.lower()
+        if button_lower == self.current_command:
+            return CommandStatus.PASSED
+        elif self.is_supported_command(button_name):
+            return CommandStatus.FAILED
+        else:
+            return CommandStatus.WAITING
+
+    def check_command(self, _event=None):
+        """Check current command status.
+
+        Returns:
+            CommandStatus of last button press (for event handling).
+            Resets to WAITING after returning.
+        """
+        status = self.last_status
+        self.last_status = CommandStatus.WAITING
+        return status
 
     def get_button_name(self, event):
         button = getattr(event, "button", None)
@@ -68,20 +109,3 @@ class MegaDriveModule:
 
         source_upper = source.upper()
         return ("SEGA" in source_upper) or ("MEGADRIVE" in source_upper)
-
-    def is_app_instance(self, instance):
-        class_name = instance.__class__.__name__.lower()
-        if class_name in ("sega", "megadrive", "segacontroller"):
-            return True
-
-        module_name = getattr(instance.__class__, "__module__", "").lower()
-        if "0x4291" in module_name and "5e6a" in module_name:
-            return True
-
-        rendered = str(instance).lower()
-        return "sega" in rendered or "megadrive" in rendered
-
-
-
-# Backward-compatible alias for older imports.
-MegaDriveController = MegaDriveModule
