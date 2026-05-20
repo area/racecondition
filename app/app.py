@@ -77,6 +77,9 @@ class ExampleApp(app.App):
 
     def _menu_select(self, item, idx):
         if item == "Start Game":
+            if self.menu:
+                self.menu._cleanup()
+                self.menu = None
             self.score_pass = 0
             self.score_fail = 0
             self.game_start_time = time.time()
@@ -86,6 +89,15 @@ class ExampleApp(app.App):
             self.in_game = False
             self.button_states.clear()
             self.minimise()
+
+    def _ensure_menu(self):
+        if not self.menu:
+            self.menu = Menu(
+                self,
+                ["Start Game", "Quit"],
+                select_handler=self._menu_select,
+                back_handler=self._menu_back,
+            )
 
     def _menu_back(self):
         pass
@@ -122,6 +134,7 @@ class ExampleApp(app.App):
                 if held >= CANCEL_HOLD_MS:
                     self.in_game = False
                     self.cancel_hold_start = None
+                    self._ensure_menu()
                     return
 
             if self.active_module:
@@ -133,6 +146,7 @@ class ExampleApp(app.App):
                     self.score_fail += 1
                     self._next_command()
         else:
+            self._ensure_menu()
             if self.menu:
                 self.menu.update(delta)
 
@@ -150,8 +164,12 @@ class ExampleApp(app.App):
             ctx.text_align = ctx.CENTER
             ctx.text_baseline = ctx.MIDDLE
             ctx.rgb(0, 1, 0)
+            ctx.font_size = 16
+            ctx.move_to(0, -50).text(
+                self.active_module.FRIENDLY_NAME if self.active_module else "No module connected"
+            )
             ctx.font_size = 24
-            ctx.move_to(0, -40).text(self.current_command or "No module connected")
+            ctx.move_to(0, -28).text(self.current_command or "")
             ctx.font_size = 18
             ctx.move_to(0, 0).text(
                 "Pass: {}  Fail: {}".format(self.score_pass, self.score_fail)

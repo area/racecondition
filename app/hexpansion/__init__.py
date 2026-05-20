@@ -1,4 +1,5 @@
-from .MegaDrive import CommandStatus, MegaDriveModule
+from .base import CommandStatus, HexpansionModule
+from .MegaDrive import MegaDriveModule
 
 
 MODULES = [
@@ -14,4 +15,4 @@ def get_connected_modules(hexpansions):
 	return connected
 
 
-__all__ = ["MegaDriveModule", "CommandStatus", "get_connected_modules"]
+__all__ = ["HexpansionModule", "MegaDriveModule", "CommandStatus", "get_connected_modules"]
