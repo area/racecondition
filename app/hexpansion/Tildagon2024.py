@@ -34,6 +34,7 @@ class Tildagon2024Module(HexpansionModule):
 
     def on_button_down(self, event):
         button_name = self._get_button_name(event)
+        print("[Tildagon] Button down: {}".format(button_name))
         if button_name is None:
             return
         if self.current_command == "shake":
@@ -74,11 +75,11 @@ class Tildagon2024Module(HexpansionModule):
         button = getattr(event, "button", None)
         if button is None:
             return None
-        for attr in ("name", "_name", "label"):
-            value = getattr(button, attr, None)
-            if isinstance(value, str) and value:
-                return value.lower()
-        return None
+        # Button has to be from us
+        if button.group != "TwentyTwentyFour":
+            return None
+        value = button.name
+        return value.lower()
 
     def _read_accel_xyz(self):
         print("[Tildagon] Reading accelerometer...")

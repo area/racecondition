@@ -25,8 +25,8 @@ class MegaDriveModule(HexpansionModule):
         button = getattr(event, "button", None)
         if button is None:
             return None
-        for attr in ("name", "_name", "label"):
-            value = getattr(button, attr, None)
-            if isinstance(value, str) and value:
-                return value.lower()
-        return None
+        if button.group != "SegaController":
+            return None
+
+        value = button.name
+        return value.lower()
