@@ -6,7 +6,7 @@ from .base import HexpansionModule, CommandStatus
 
 
 TARGET_DISTANCE_M = 5
-COMMAND_TIMEOUT_MS = 1500000
+COMMAND_TIMEOUT_MS = 15000
 
 
 def _distance_m(lat1, lon1, lat2, lon2):
