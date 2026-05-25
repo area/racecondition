@@ -49,10 +49,18 @@ class GPSModule(HexpansionModule):
 
     def generate_command(self):
         self.current_command = "move 5m away"
+        self._setup_command()
+        return self.current_command
+
+    def set_command(self, command):
+        result = super().set_command(command)
+        self._setup_command()
+        return result
+
+    def _setup_command(self):
         self._command_started_ms = time.ticks_ms()
         self._start_pos = self._current_pos  # snapshot current position (may be None)
-        print("[GPS] Command generated. Start pos: {}".format(self._start_pos))
-        return self.current_command
+        print("[GPS] Command setup. Start pos: {}".format(self._start_pos))
 
     def on_button_down(self, event):
         pass

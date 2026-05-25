@@ -1,5 +1,4 @@
 import app
-import os
 import time
 
 from machine import I2C
@@ -11,51 +10,58 @@ from system.hexpansion.events import HexpansionRemovalEvent, HexpansionInsertion
 from system.hexpansion.util import read_hexpansion_header, detect_eeprom_addr
 
 from .hexpansion_names import get_friendly_name
-from .hexpansion import get_connected_modules, CommandStatus
-import app
-import random
-import time
-
-from machine import I2C
-
-from app_components import Menu, clear_background, Notification
-from events.input import Buttons, ButtonDownEvent, ButtonUpEvent
-from system.eventbus import eventbus
-from system.hexpansion.events import HexpansionRemovalEvent, HexpansionInsertionEvent
-from system.hexpansion.util import read_hexpansion_header, detect_eeprom_addr
-
-from .hexpansion_names import get_friendly_name
-from .hexpansion import get_connected_modules, CommandStatus
+from .hexpansion import get_connected_modules, get_capabilities, CommandStatus
+from .room_client import RoomClient
 
 
 CANCEL_HOLD_MS = 4000
+ROOM_COUNT = 5
+SERVER_POLL_INTERVAL_MS = 750
+
+
+def _build_badge_id():
+	try:
+		import machine
+		import ubinascii
+
+		return ubinascii.hexlify(machine.unique_id()).decode("utf-8")
+	except Exception:
+		return "badge-{}".format(time.ticks_ms())
 
 
 class ExampleApp(app.App):
 	def __init__(self):
 		self.button_states = Buttons(self)
+		self.badge_id = _build_badge_id()
+		self.room_id = 1
 		self.in_game = False
 		self.cancel_hold_start = None
 		self.connected_modules = []
-		self.active_module = None
-		self.current_command = None
+		self.expected_module = None
+		self.expected_command_id = None
+		self.expected_command = None
+		self.display_module_name = None
+		self.display_command = None
+		self.pending_result = None
+		self.last_poll_ms = None
+		self._network_error_shown = False
 		self.score_pass = 0
 		self.score_fail = 0
 		self.game_start_time = None
 		self.notification = None
-		self.menu = Menu(
-			self,
-			["Start Game", "Quit"],
-			select_handler=self._menu_select,
-			back_handler=self._menu_back,
-		)
+		self.room_client = RoomClient()
+		self.menu = None
 		self._scan()
+		self._ensure_menu()
+
 		eventbus.on(HexpansionInsertionEvent, self._on_insert, self)
 		eventbus.on(HexpansionRemovalEvent, self._on_remove, self)
 		eventbus.on(ButtonDownEvent, self._on_button_down, self)
 		eventbus.on(ButtonUpEvent, self._on_button_up, self)
 
 	def _cleanup(self):
+		if self.in_game:
+			self._leave_room()
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
@@ -82,24 +88,26 @@ class ExampleApp(app.App):
 		if self._is_cancel(event) and self.in_game:
 			if self.cancel_hold_start is None:
 				self.cancel_hold_start = time.ticks_ms()
-		if self.in_game and self.active_module:
-			self.active_module.on_button_down(event)
+		if self.in_game and self.expected_module:
+			self.expected_module.on_button_down(event)
 
 	def _on_button_up(self, event):
 		if self._is_cancel(event):
 			self.cancel_hold_start = None
 
+	def _menu_items(self):
+		items = []
+		for room in range(1, ROOM_COUNT + 1):
+			items.append("Join Room {}".format(room))
+		items.append("Quit")
+		return items
+
 	def _menu_select(self, item, idx):
-		if item == "Start Game":
-			if self.menu:
-				self.menu._cleanup()
-				self.menu = None
-			self.score_pass = 0
-			self.score_fail = 0
-			self.game_start_time = time.time()
-			self.in_game = True
-			self._next_command()
+		if item.startswith("Join Room "):
+			room = int(item.split(" ")[-1])
+			self._start_room(room)
 		elif item == "Quit":
+			self._leave_room()
 			self.in_game = False
 			self.button_states.clear()
 			self.minimise()
@@ -108,7 +116,7 @@ class ExampleApp(app.App):
 		if not self.menu:
 			self.menu = Menu(
 				self,
-				["Start Game", "Quit"],
+				self._menu_items(),
 				select_handler=self._menu_select,
 				back_handler=self._menu_back,
 			)
@@ -133,32 +141,159 @@ class ExampleApp(app.App):
 			}
 		self.connected_modules = get_connected_modules(hexpansions)
 
-	def _next_command(self):
-		if self.connected_modules:
-			self.active_module = random.choice(self.connected_modules)
-			self.current_command = self.active_module.generate_command()
-		else:
-			self.active_module = None
-			self.current_command = None
+	def _module_by_name(self, module_name):
+		for module in self.connected_modules:
+			if module.FRIENDLY_NAME == module_name:
+				return module
+		return None
+
+	def _start_room(self, room_id):
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
+		self.room_id = room_id
+		self._network_error_shown = False
+		self.score_pass = 0
+		self.score_fail = 0
+		self.expected_module = None
+		self.expected_command_id = None
+		self.expected_command = None
+		self.display_module_name = None
+		self.display_command = None
+		self.pending_result = None
+		self.last_poll_ms = None
+		self.game_start_time = time.time()
+		self.in_game = True
+		self.cancel_hold_start = None
+		if self.room_client.available():
+			_, error = self.room_client.join_room(
+				self.room_id,
+				self.badge_id,
+				self._capabilities(),
+			)
+			if error:
+				self.notification = Notification("Join failed: {}".format(error))
+		self._poll_server(force=True)
+
+	def _set_assignment(self, assignment):
+		if not assignment:
+			self.expected_module = None
+			self.expected_command_id = None
+			self.expected_command = None
+			return
+
+		module_name = assignment.get("module")
+		command = assignment.get("command")
+		assignment_id = assignment.get("id")
+
+		module = self._module_by_name(module_name)
+		if not module:
+			self.expected_module = None
+			self.expected_command_id = None
+			self.expected_command = None
+			return
+
+		if self.expected_command_id != assignment_id:
+			try:
+				module.set_command(command)
+			except Exception:
+				self.expected_module = None
+				self.expected_command_id = None
+				self.expected_command = None
+				return
+
+		self.expected_module = module
+		self.expected_command_id = assignment_id
+		self.expected_command = command
+
+	def _set_display(self, display):
+		if not display:
+			self.display_module_name = None
+			self.display_command = None
+			return
+		self.display_module_name = display.get("module")
+		self.display_command = display.get("command")
+
+	def _capabilities(self):
+		return get_capabilities(self.connected_modules)
+
+	def _leave_room(self):
+		if self.room_client.available():
+			_, error = self.room_client.leave_room(
+				self.room_id,
+				self.badge_id,
+			)
+			if error:
+				print("[App] Leave failed: {}".format(error))
+
+	def _poll_server(self, force=False):
+		if not self.in_game:
+			return
+
+		now_ms = time.ticks_ms()
+		if not force and self.last_poll_ms is not None:
+			if time.ticks_diff(now_ms, self.last_poll_ms) < SERVER_POLL_INTERVAL_MS:
+				return
+		self.last_poll_ms = now_ms
+
+		if not self.room_client.available():
+			if not self._network_error_shown:
+				err = self.room_client._import_error or "urequests not found"
+				self.notification = Notification("No network: {}".format(err))
+				self._network_error_shown = True
+			return
+
+		data, error = self.room_client.poll(
+			self.room_id,
+			self.badge_id,
+			self._capabilities(),
+			result=self.pending_result,
+		)
+		if error:
+			self.notification = Notification("Server error: {}".format(error))
+			return
+
+		self.pending_result = None
+		self._set_assignment(data.get("assignment"))
+		self._set_display(data.get("display"))
 
 	def update(self, delta):
 		if self.in_game:
 			if self.cancel_hold_start is not None:
 				held = time.ticks_diff(time.ticks_ms(), self.cancel_hold_start)
 				if held >= CANCEL_HOLD_MS:
+					self._leave_room()
 					self.in_game = False
 					self.cancel_hold_start = None
 					self._ensure_menu()
 					return
 
-			if self.active_module:
-				status = self.active_module.check_command()
+			if self.expected_module:
+				status = self.expected_module.check_command()
 				if status == CommandStatus.PASSED:
 					self.score_pass += 1
-					self._next_command()
+					self.pending_result = {
+						"assignment_id": self.expected_command_id,
+						"status": status,
+						"module": self.expected_module.FRIENDLY_NAME,
+						"command": self.expected_command,
+					}
+					self.expected_module = None
+					self.expected_command_id = None
+					self.expected_command = None
 				elif status == CommandStatus.FAILED:
 					self.score_fail += 1
-					self._next_command()
+					self.pending_result = {
+						"assignment_id": self.expected_command_id,
+						"status": status,
+						"module": self.expected_module.FRIENDLY_NAME,
+						"command": self.expected_command,
+					}
+					self.expected_module = None
+					self.expected_command_id = None
+					self.expected_command = None
+
+			self._poll_server(force=False)
 		else:
 			self._ensure_menu()
 			if self.menu:
@@ -178,24 +313,26 @@ class ExampleApp(app.App):
 			ctx.text_align = ctx.CENTER
 			ctx.text_baseline = ctx.MIDDLE
 			ctx.rgb(0, 1, 0)
-			ctx.font_size = 16
-			ctx.move_to(0, -50).text(
-				self.active_module.FRIENDLY_NAME if self.active_module else "No module connected"
-			)
-			ctx.font_size = 24
-			ctx.move_to(0, -28).text(self.current_command or "")
-			ctx.font_size = 18
-			ctx.move_to(0, 0).text(
-				"Pass: {}  Fail: {}".format(self.score_pass, self.score_fail)
-			)
-			ctx.font_size = 36
-			ctx.move_to(0, 40).text(self._format_clock())
 			ctx.font_size = 14
+			ctx.move_to(0, -58).text("Room {}  Badge {}".format(self.room_id, self.badge_id[-6:]))
+			ctx.font_size = 16
+			ctx.move_to(0, -38).text(self.display_module_name or "Waiting for room commands")
+			ctx.font_size = 24
+			ctx.move_to(0, -14).text(self.display_command or "...")
+			ctx.font_size = 14
+			if self.expected_command:
+				ctx.move_to(0, 10).text("Task assigned - use your controls")
+			else:
+				ctx.move_to(0, 10).text("Waiting for assignment")
+			ctx.font_size = 18
+			ctx.move_to(0, 30).text("Pass: {}  Fail: {}".format(self.score_pass, self.score_fail))
+			ctx.font_size = 30
+			ctx.move_to(0, 58).text(self._format_clock())
+			ctx.font_size = 12
 			modules = ", ".join(m.FRIENDLY_NAME for m in self.connected_modules)
-			ctx.move_to(0, 75).text(modules or "No modules")
+			ctx.move_to(0, 77).text(modules or "No modules")
 		elif self.menu:
 			self.menu.draw(ctx)
 		if self.notification:
 			self.notification.draw(ctx)
 		ctx.restore()
-

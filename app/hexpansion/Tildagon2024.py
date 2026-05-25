@@ -24,13 +24,21 @@ class Tildagon2024Module(HexpansionModule):
 
     def generate_command(self):
         command = super().generate_command()
+        self._setup_command(command)
+        return command
+
+    def set_command(self, command):
+        result = super().set_command(command)
+        self._setup_command(command)
+        return result
+
+    def _setup_command(self, command):
         if command == "shake":
             self._shake_started_ms = time.ticks_ms()
             self._last_accel = self._read_accel_xyz()
         else:
             self._shake_started_ms = None
             self._last_accel = None
-        return command
 
     def on_button_down(self, event):
         button_name = self._get_button_name(event)

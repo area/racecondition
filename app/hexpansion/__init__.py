@@ -19,6 +19,10 @@ def get_connected_modules(hexpansions):
 	return connected
 
 
+def get_capabilities(modules):
+	return [module.get_capabilities() for module in modules]
+
+
 __all__ = [
 	"HexpansionModule",
 	"MegaDriveModule",
@@ -26,4 +30,5 @@ __all__ = [
 	"Tildagon2024Module",
 	"CommandStatus",
 	"get_connected_modules",
+	"get_capabilities",
 ]

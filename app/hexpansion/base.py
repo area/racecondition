@@ -26,6 +26,19 @@ class HexpansionModule:
         self.last_status = CommandStatus.WAITING
         return self.current_command
 
+    def set_command(self, command):
+        if command not in self.COMMAND_OPTIONS:
+            raise ValueError("Unsupported command '{}' for {}".format(command, self.FRIENDLY_NAME))
+        self.current_command = command
+        self.last_status = CommandStatus.WAITING
+        return self.current_command
+
+    def get_capabilities(self):
+        return {
+            "module": self.FRIENDLY_NAME,
+            "commands": list(self.COMMAND_OPTIONS),
+        }
+
     def on_button_down(self, event):
         pass
 
