@@ -11,6 +11,7 @@ HOST = "0.0.0.0"
 PORT = 8000
 ROOM_IDS = tuple(range(1, 6))
 STALE_BADGE_SECONDS = 20
+COLOURS = ["red", "green", "blue"]
 
 
 ADMIN_HTML = """<!doctype html>
@@ -149,12 +150,13 @@ ADMIN_HTML = """<!doctype html>
             const badges = room.badges || [];
             const assignments = room.assignments || [];
 
+            const colourDot = (c) => c ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(c)};margin-right:4px;vertical-align:middle"></span>` : '';
             const badgeList = badges.length
-                ? badges.map((b) => `<li><strong>${esc(b.badge_id)}</strong> <span class="badge">${b.module_count} modules</span></li>`).join("")
+                ? badges.map((b) => `<li>${colourDot(b.colour)}<strong>${esc(b.badge_id)}</strong> <span class="badge">${esc(b.colour || '?')}</span> <span class="muted">${b.module_count} modules</span></li>`).join("")
                 : '<li class="muted">No active badges</li>';
 
             const assignmentList = assignments.length
-                ? assignments.map((a) => `<li><strong>${esc(a.command)}</strong> on ${esc(a.module)} <span class="muted">for ${esc(a.target_badge_id)}</span></li>`).join("")
+                ? assignments.map((a) => `<li>${colourDot(a.target_colour)}<strong>${esc(a.target_colour ? a.target_colour.charAt(0).toUpperCase() + a.target_colour.slice(1) + ': ' : '')}${esc(a.command)}</strong> on ${esc(a.module)} <span class="muted">${esc(a.target_badge_id)}</span></li>`).join("")
                 : '<li class="muted">No active assignments</li>';
 
             return `
@@ -241,6 +243,7 @@ rooms = {
     room_id: {
         "badges": {},
         "assignments": {},
+        "badge_colours": {},
         "next_assignment_id": 1,
         "scores": {"passed": 0, "failed": 0},
     }
@@ -285,6 +288,9 @@ def _prune_stale_badges(room):
 
 
 def _set_badge(room, badge_id, capabilities):
+    if badge_id not in room["badge_colours"]:
+        idx = len(room["badge_colours"]) % len(COLOURS)
+        room["badge_colours"][badge_id] = COLOURS[idx]
     room["badges"][badge_id] = {
         "capabilities": capabilities,
         "last_seen": _now(),
@@ -343,19 +349,26 @@ def _assignment_for_badge(room, badge_id):
 
 
 def _display_for_badge(room, badge_id):
-    all_assignments = list(room["assignments"].values())
+    all_assignments = list(room["assignments"].items())
     if not all_assignments:
         return None
 
     other_assignments = [
-        assignment
-        for assignment in all_assignments
-        if assignment.get("target_badge_id") != badge_id
+        (tid, assignment)
+        for tid, assignment in all_assignments
+        if tid != badge_id
     ]
 
     if other_assignments and random.random() < 0.75:
-        return random.choice(other_assignments)
-    return random.choice(all_assignments)
+        target_id, assignment = random.choice(other_assignments)
+    else:
+        target_id, assignment = random.choice(all_assignments)
+
+    return {
+        "module": assignment["module"],
+        "command": assignment["command"],
+        "target_colour": room["badge_colours"].get(target_id),
+    }
 
 
 def _apply_result(room, badge_id, result):
@@ -382,6 +395,7 @@ def _reset_room(room):
     """Reset room state when empty."""
     room["badges"].clear()
     room["assignments"].clear()
+    room["badge_colours"].clear()
     room["next_assignment_id"] = 1
     room["scores"] = {"passed": 0, "failed": 0}
 
@@ -392,17 +406,19 @@ def _room_admin_snapshot(room_id, room):
         badges.append(
             {
                 "badge_id": badge_id,
+                "colour": room["badge_colours"].get(badge_id),
                 "module_count": len(badge["capabilities"]),
                 "last_seen_s": round(_now() - badge["last_seen"], 1),
             }
         )
 
     assignments = []
-    for assignment in room["assignments"].values():
+    for target_id, assignment in room["assignments"].items():
         assignments.append(
             {
                 "id": assignment["id"],
-                "target_badge_id": assignment["target_badge_id"],
+                "target_badge_id": target_id,
+                "target_colour": room["badge_colours"].get(target_id),
                 "module": assignment["module"],
                 "command": assignment["command"],
                 "age_s": round(_now() - assignment["issued_at"], 1),
@@ -501,6 +517,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             if action == "leave":
                 room["badges"].pop(badge_id, None)
                 room["assignments"].pop(badge_id, None)
+                room["badge_colours"].pop(badge_id, None)
                 if not room["badges"]:
                     _reset_room(room)
                 response = {
@@ -518,6 +535,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
                     "display": display,
                     "scores": room["scores"],
                     "badge_count": len(room["badges"]),
+                    "colour": room["badge_colours"].get(badge_id),
                 }
             else:  # join
                 assignment = _assignment_for_badge(room, badge_id)
@@ -528,6 +546,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
                     "display": display,
                     "scores": room["scores"],
                     "badge_count": len(room["badges"]),
+                    "colour": room["badge_colours"].get(badge_id),
                 }
 
         self._send_json(200, response)

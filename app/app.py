@@ -8,10 +8,18 @@ from events.input import Buttons, ButtonDownEvent, ButtonUpEvent
 from system.eventbus import eventbus
 from system.hexpansion.events import HexpansionRemovalEvent, HexpansionInsertionEvent
 from system.hexpansion.util import read_hexpansion_header, detect_eeprom_addr
+from system.patterndisplay.events import PatternDisable
+from tildagonos import tildagonos
 
 from .hexpansion_names import get_friendly_name
 from .hexpansion import get_connected_modules, get_capabilities, CommandStatus
 from .room_client import RoomClient
+
+BADGE_COLOURS = {
+    "red": (40, 0, 0),
+    "green": (0, 40, 0),
+    "blue": (0, 0, 40),
+}
 
 
 CANCEL_HOLD_MS = 4000
@@ -49,10 +57,12 @@ class ExampleApp(app.App):
 		self.score_fail = 0
 		self.game_start_time = None
 		self.notification = None
+		self.badge_colour = None
 		self.room_client = RoomClient()
 		self.menu = None
 		self._scan()
 		self._ensure_menu()
+		eventbus.emit(PatternDisable())
 
 		eventbus.on(HexpansionInsertionEvent, self._on_insert, self)
 		eventbus.on(HexpansionRemovalEvent, self._on_remove, self)
@@ -212,12 +222,25 @@ class ExampleApp(app.App):
 			self.display_command = None
 			return
 		self.display_module_name = display.get("module")
-		self.display_command = display.get("command")
+		command = display.get("command")
+		colour = display.get("target_colour")
+		if colour:
+			self.display_command = "{}: {}".format(colour[0].upper() + colour[1:], command)
+		else:
+			self.display_command = command
 
 	def _capabilities(self):
 		return get_capabilities(self.connected_modules)
 
+	def _set_leds(self, colour):
+		rgb = BADGE_COLOURS.get(colour, (0, 0, 0))
+		for i in range(1, 13):
+			tildagonos.leds[i] = rgb
+		tildagonos.leds.write()
+
 	def _leave_room(self):
+		self._set_leds(None)
+		self.badge_colour = None
 		if self.room_client.available():
 			_, error = self.room_client.leave_room(
 				self.room_id,
@@ -256,6 +279,10 @@ class ExampleApp(app.App):
 		self.pending_result = None
 		self._set_assignment(data.get("assignment"))
 		self._set_display(data.get("display"))
+		colour = data.get("colour")
+		if colour and colour != self.badge_colour:
+			self.badge_colour = colour
+			self._set_leds(colour)
 
 	def update(self, delta):
 		if self.in_game:
