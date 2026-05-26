@@ -45,5 +45,5 @@ class HexpansionModule:
     def on_button_down(self, event):
         pass
 
-    def check_command(self):
+    def check_command(self) -> str:
         return CommandStatus.WAITING
