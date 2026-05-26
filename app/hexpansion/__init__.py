@@ -4,19 +4,51 @@ from .GPS import GPSModule
 from .Tildagon2024 import Tildagon2024Module
 
 
-MODULES = [
-	Tildagon2024Module(),
-	MegaDriveModule(),
-	GPSModule(),
+MODULE_TYPES = [
+	Tildagon2024Module,
+	MegaDriveModule,
+	GPSModule,
 ]
 
 
+class ModuleRegistry:
+	def __init__(self, module_types=None):
+		self.module_types = module_types or MODULE_TYPES
+		self._connected_modules = {}
+
+	def scan(self, hexpansions):
+		connected = {}
+		for module_type in self.module_types:
+			friendly_name = module_type.FRIENDLY_NAME
+			module = self._connected_modules.get(friendly_name)
+			if module is None:
+				module = module_type()
+			if module.is_connected(hexpansions):
+				connected[friendly_name] = module
+
+		for friendly_name, module in self._connected_modules.items():
+			if friendly_name not in connected:
+				module.reset()
+
+		self._connected_modules = connected
+		return self.connected_modules()
+
+	def connected_modules(self):
+		return list(self._connected_modules.values())
+
+	def get_by_name(self, module_name):
+		return self._connected_modules.get(module_name)
+
+	def get_capabilities(self):
+		return [module.get_capabilities() for module in self.connected_modules()]
+
+	def reset_connected(self):
+		for module in self._connected_modules.values():
+			module.reset()
+
+
 def get_connected_modules(hexpansions):
-	connected = []
-	for module in MODULES:
-		if module.is_connected(hexpansions):
-			connected.append(module)
-	return connected
+	return ModuleRegistry().scan(hexpansions)
 
 
 def get_capabilities(modules):
@@ -29,6 +61,7 @@ __all__ = [
 	"GPSModule",
 	"Tildagon2024Module",
 	"CommandStatus",
+	"ModuleRegistry",
 	"get_connected_modules",
 	"get_capabilities",
 ]

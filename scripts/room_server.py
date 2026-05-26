@@ -4,6 +4,7 @@ import random
 import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Lock
 
 
@@ -13,240 +14,35 @@ ROOM_IDS = tuple(range(1, 6))
 STALE_BADGE_SECONDS = 20
 COLOURS = ["red", "green", "blue"]
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
 
-ADMIN_HTML = """<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SpaceTeam Admin</title>
-    <style>
-        :root {
-            --bg: #f4efe3;
-            --panel: #fff9ec;
-            --line: #d7c9aa;
-            --text: #2c2314;
-            --accent: #0f766e;
-            --accent-2: #b45309;
-            --ok: #166534;
-            --bad: #991b1b;
-        }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            color: var(--text);
-            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-            background:
-                radial-gradient(circle at 20% 10%, rgba(180, 83, 9, 0.1), transparent 40%),
-                radial-gradient(circle at 90% 90%, rgba(15, 118, 110, 0.12), transparent 42%),
-                var(--bg);
-        }
-        header {
-            padding: 20px 24px 8px;
-        }
-        h1 {
-            margin: 0;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            letter-spacing: 0.02em;
-            font-weight: 700;
-            font-size: 30px;
-        }
-        .sub {
-            opacity: 0.8;
-            margin-top: 6px;
-            font-size: 14px;
-        }
-        main {
-            display: grid;
-            gap: 16px;
-            padding: 16px 24px 28px;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        }
-        .room {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 14px;
-            box-shadow: 0 8px 18px rgba(44, 35, 20, 0.06);
-        }
-        .room.room-enter {
-            transform: translateY(8px);
-            opacity: 0;
-            animation: rise 360ms ease forwards;
-        }
-        .room h2 {
-            margin: 0 0 10px;
-            font-size: 20px;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-        }
-        .row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 6px;
-            font-size: 14px;
-        }
-        .scores {
-            margin: 10px 0;
-            padding: 8px;
-            border-radius: 10px;
-            border: 1px dashed var(--line);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            font-weight: 600;
-        }
-        .ok { color: var(--ok); }
-        .bad { color: var(--bad); }
-        ul {
-            margin: 8px 0 0;
-            padding-left: 16px;
-            font-size: 13px;
-        }
-        li { margin-bottom: 4px; }
-        .muted { opacity: 0.7; }
-        .badge {
-            display: inline-block;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            padding: 2px 8px;
-            margin-left: 6px;
-            font-size: 12px;
-            color: var(--accent);
-            background: rgba(15, 118, 110, 0.08);
-        }
-        .footer {
-            padding: 4px 24px 20px;
-            font-size: 12px;
-            opacity: 0.75;
-        }
-        @keyframes rise {
-            to { transform: translateY(0); opacity: 1; }
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>SpaceTeam Admin Console</h1>
-        <div class="sub">Live room state, badges, assignments, and scores</div>
-    </header>
-    <main id="rooms"></main>
-    <div class="footer" id="updated">Waiting for data...</div>
 
-    <script>
-        const roomsEl = document.getElementById("rooms");
-        const updatedEl = document.getElementById("updated");
-        const roomNodes = new Map();
+def _load_admin_html():
+    try:
+        return ADMIN_HTML_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        return "<h1>Admin page unavailable</h1><p>{}</p>".format(exc)
 
-        function esc(v) {
-            return String(v)
-                .replaceAll("&", "&amp;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;")
-                .replaceAll('"', "&quot;")
-                .replaceAll("'", "&#39;");
-        }
 
-        function roomCard(room) {
-            const badges = room.badges || [];
-            const assignments = room.assignments || [];
-
-            const colourDot = (c) => c ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(c)};margin-right:4px;vertical-align:middle"></span>` : '';
-            const badgeList = badges.length
-                ? badges.map((b) => `<li>${colourDot(b.colour)}<strong>${esc(b.badge_id)}</strong> <span class="badge">${esc(b.colour || '?')}</span> <span class="muted">${b.module_count} modules</span></li>`).join("")
-                : '<li class="muted">No active badges</li>';
-
-            const assignmentList = assignments.length
-                ? assignments.map((a) => `<li>${colourDot(a.target_colour)}<strong>${esc(a.target_colour ? a.target_colour.charAt(0).toUpperCase() + a.target_colour.slice(1) + ': ' : '')}${esc(a.command)}</strong> on ${esc(a.module)} <span class="muted">${esc(a.target_badge_id)}</span></li>`).join("")
-                : '<li class="muted">No active assignments</li>';
-
-            return `
-                <section class="room">
-                    <h2>Room ${room.room_id}</h2>
-                    <div class="row"><span>Badges</span><strong>${room.badge_count}</strong></div>
-                    <div class="row"><span>Assignments</span><strong>${assignments.length}</strong></div>
-                    <div class="scores">
-                        <div class="ok">Pass: ${room.scores.passed}</div>
-                        <div class="bad">Fail: ${room.scores.failed}</div>
-                    </div>
-                    <div><strong>Badges</strong></div>
-                    <ul>${badgeList}</ul>
-                    <div><strong>Assignments</strong></div>
-                    <ul>${assignmentList}</ul>
-                </section>
-            `;
-        }
-
-        function createRoomNode(room) {
-            const wrapper = document.createElement("div");
-            wrapper.innerHTML = roomCard(room).trim();
-            const section = wrapper.firstElementChild;
-            section.classList.add("room-enter");
-            section.addEventListener(
-                "animationend",
-                () => {
-                    section.classList.remove("room-enter");
-                },
-                { once: true }
-            );
-            return section;
-        }
-
-        function updateRooms(rooms) {
-            const seen = new Set();
-
-            for (const room of rooms) {
-                const key = String(room.room_id);
-                seen.add(key);
-                const existing = roomNodes.get(key);
-                if (!existing) {
-                    const node = createRoomNode(room);
-                    roomNodes.set(key, node);
-                    roomsEl.appendChild(node);
-                    continue;
-                }
-
-                const wrapper = document.createElement("div");
-                wrapper.innerHTML = roomCard(room).trim();
-                const next = wrapper.firstElementChild;
-                existing.innerHTML = next.innerHTML;
-            }
-
-            for (const [key, node] of roomNodes.entries()) {
-                if (!seen.has(key)) {
-                    node.remove();
-                    roomNodes.delete(key);
-                }
-            }
-        }
-
-        async function refresh() {
-            try {
-                const response = await fetch('/api/admin/status');
-                const data = await response.json();
-                updateRooms(data.rooms || []);
-                updatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()} | Active badges: ${data.total_badges}`;
-            } catch (err) {
-                updatedEl.textContent = `Admin fetch failed: ${err}`;
-            }
-        }
-
-        refresh();
-        setInterval(refresh, 1000);
-    </script>
-</body>
-</html>
-"""
+ADMIN_HTML = _load_admin_html()
 
 
 state_lock = Lock()
-rooms = {
-    room_id: {
+
+
+def _new_room_state():
+    return {
         "badges": {},
         "assignments": {},
         "badge_colours": {},
         "next_assignment_id": 1,
         "scores": {"passed": 0, "failed": 0},
     }
+
+
+rooms = {
+    room_id: _new_room_state()
     for room_id in ROOM_IDS
 }
 
@@ -285,6 +81,7 @@ def _prune_stale_badges(room):
     for badge_id in stale_badges:
         room["badges"].pop(badge_id, None)
         room["assignments"].pop(badge_id, None)
+        room["badge_colours"].pop(badge_id, None)
 
 
 def _set_badge(room, badge_id, capabilities):
@@ -393,11 +190,22 @@ def _apply_result(room, badge_id, result):
 
 def _reset_room(room):
     """Reset room state when empty."""
-    room["badges"].clear()
-    room["assignments"].clear()
-    room["badge_colours"].clear()
-    room["next_assignment_id"] = 1
-    room["scores"] = {"passed": 0, "failed": 0}
+    new_state = _new_room_state()
+    room.clear()
+    room.update(new_state)
+
+
+def _room_poll_response(room_id, room, badge_id):
+    assignment = _assignment_for_badge(room, badge_id)
+    display = _display_for_badge(room, badge_id)
+    return {
+        "room_id": room_id,
+        "assignment": assignment,
+        "display": display,
+        "scores": room["scores"],
+        "badge_count": len(room["badges"]),
+        "colour": room["badge_colours"].get(badge_id),
+    }
 
 
 def _room_admin_snapshot(room_id, room):
@@ -527,31 +335,13 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
                 }
             elif action == "poll":
                 _apply_result(room, badge_id, payload.get("result"))
-                assignment = _assignment_for_badge(room, badge_id)
-                display = _display_for_badge(room, badge_id)
-                response = {
-                    "room_id": room_id,
-                    "assignment": assignment,
-                    "display": display,
-                    "scores": room["scores"],
-                    "badge_count": len(room["badges"]),
-                    "colour": room["badge_colours"].get(badge_id),
-                }
+                response = _room_poll_response(room_id, room, badge_id)
             else:  # join
-                assignment = _assignment_for_badge(room, badge_id)
-                display = _display_for_badge(room, badge_id)
-                response = {
-                    "room_id": room_id,
-                    "assignment": assignment,
-                    "display": display,
-                    "scores": room["scores"],
-                    "badge_count": len(room["badges"]),
-                    "colour": room["badge_colours"].get(badge_id),
-                }
+                response = _room_poll_response(room_id, room, badge_id)
 
         self._send_json(200, response)
 
-    def log_message(self, fmt, *args):
+    def log_message(self, format, *args):
         return
 
 

@@ -14,7 +14,9 @@ class Tildagon2024Module(HexpansionModule):
 
     def __init__(self):
         super().__init__()
-        self.last_status = CommandStatus.WAITING
+
+    def reset(self):
+        super().reset()
         self._shake_started_ms = None
         self._last_accel = None
 

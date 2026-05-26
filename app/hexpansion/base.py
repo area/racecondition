@@ -12,6 +12,9 @@ class HexpansionModule:
     COMMAND_OPTIONS = []
 
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.current_command = None
         self.last_status = CommandStatus.WAITING
 

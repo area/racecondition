@@ -43,9 +43,13 @@ class GPSModule(HexpansionModule):
         super().__init__()
         self._uart = UART(1, baudrate=9600, tx=Pin(34), rx=Pin(33))
         self._buffer = b""
+
+    def reset(self):
+        super().reset()
         self._current_pos = None
         self._start_pos = None
         self._command_started_ms = None
+        self._buffer = b""
 
     def generate_command(self):
         self.current_command = "move 5m away"
