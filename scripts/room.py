@@ -60,6 +60,13 @@ class Room:
             self._assignments = {}
         return {"room_id": self.room_id, "status": "started", "room_state": "in-round"}
 
+    def set_timer(self, seconds):
+        with self._lock:
+            if self._state != "in-round" or self._round_started_at is None:
+                return {"room_id": self.room_id, "error": "Room not in-round"}
+            self._round_started_at = self._now() - (ROUND_DURATION_S - seconds)
+            return {"room_id": self.room_id, "status": "ok", "time_remaining_s": float(seconds)}
+
     def dismiss_score(self, badge_id):
         with self._lock:
             if self._state == "finished":
@@ -220,7 +227,7 @@ class Room:
             "assignment": self._assignment_for(badge_id) if in_round else None,
             "display": self._select_instruction(badge_id) if in_round else None,
             "scores": self._scores,
-            "badge_scores": dict(self._badge_scores),
+            "badge_scores": {self._colours[bid]: s for bid, s in self._badge_scores.items() if bid in self._colours},
             "badge_count": len(self._badges),
             "colour": self._colours.get(badge_id),
         }

@@ -19,6 +19,7 @@ class GameSession:
         self.badge_count = 0
         self.time_remaining_s = None
         self.server_scores = {"passed": 0, "failed": 0}
+        self.badge_scores = {}
 
     @property
     def in_game(self):
@@ -60,6 +61,7 @@ class GameSession:
         self.last_poll_ms = None
         self.badge_count = 0
         self.time_remaining_s = None
+        self.badge_scores = {}
 
     def set_room_state(self, state):
         if state == self.room_state:
@@ -71,6 +73,7 @@ class GameSession:
             self.pending_result = None
             self.score_pass = 0
             self.score_fail = 0
+            self.badge_scores = {}
 
     def set_assignment(self, module, assignment_id, command):
         self.expected_module = module

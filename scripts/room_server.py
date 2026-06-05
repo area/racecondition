@@ -83,7 +83,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "Not found"})
 
     def do_POST(self):
-        match = re.match(r"^/api/rooms/(\d+)/(join|poll|leave|start|dismiss)$", self.path)
+        match = re.match(r"^/api/rooms/(\d+)/(join|poll|leave|start|dismiss|hurry)$", self.path)
         if not match:
             self._send_json(404, {"error": "Not found"})
             return
@@ -100,12 +100,16 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "Invalid JSON: {}".format(exc)})
             return
 
+        room = rooms[room_id]
+
+        if action == "hurry":
+            self._send_json(200, room.set_timer(5))
+            return
+
         badge_id = payload.get("badge_id")
         if not isinstance(badge_id, str) or not badge_id:
             self._send_json(400, {"error": "badge_id is required"})
             return
-
-        room = rooms[room_id]
 
         if action == "join":
             response = room.join(badge_id, _normalize_capabilities(payload.get("capabilities")))

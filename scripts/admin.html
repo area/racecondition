@@ -103,6 +103,32 @@
             font-size: 12px;
             opacity: 0.75;
         }
+        .state-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .state-waiting  { background: #fef3c7; color: #92400e; }
+        .state-in-round { background: #dcfce7; color: #166534; }
+        .state-finished { background: #e0e7ff; color: #3730a3; }
+        .hurry-btn {
+            margin-top: 10px;
+            width: 100%;
+            padding: 7px 0;
+            border: none;
+            border-radius: 8px;
+            background: var(--accent-2);
+            color: #fff;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+        }
+        .hurry-btn:hover { opacity: 0.88; }
+        .hurry-btn:active { opacity: 0.75; }
         @keyframes rise {
             to { transform: translateY(0); opacity: 1; }
         }
@@ -130,9 +156,16 @@
                 .replaceAll("'", "&#39;");
         }
 
+        async function hurry(roomId) {
+            await fetch(`/api/rooms/${roomId}/hurry`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        }
+
         function roomCard(room) {
             const badges = room.badges || [];
             const assignments = room.assignments || [];
+            const state = room.room_state || "waiting";
+            const stateLabel = { waiting: "Waiting", "in-round": "In Round", finished: "Finished" }[state] || state;
+            const stateClass = { waiting: "state-waiting", "in-round": "state-in-round", finished: "state-finished" }[state] || "";
 
             const colourDot = (c) => c ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(c)};margin-right:4px;vertical-align:middle"></span>` : '';
             const badgeList = badges.length
@@ -143,9 +176,13 @@
                 ? assignments.map((a) => `<li>${colourDot(a.target_colour)}<strong>${esc(a.target_colour ? a.target_colour.charAt(0).toUpperCase() + a.target_colour.slice(1) + ': ' : '')}${esc(a.command)}</strong> on ${esc(a.module)} <span class="muted">${esc(a.target_badge_id)}</span></li>`).join("")
                 : '<li class="muted">No active assignments</li>';
 
+            const hurryBtn = state === "in-round"
+                ? `<button class="hurry-btn" onclick="hurry(${room.room_id})">⏱ Set timer to 5s</button>`
+                : "";
+
             return `
                 <section class="room">
-                    <h2>Room ${room.room_id}</h2>
+                    <h2>Room ${room.room_id} <span class="state-badge ${stateClass}">${stateLabel}</span></h2>
                     <div class="row"><span>Badges</span><strong>${room.badge_count}</strong></div>
                     <div class="row"><span>Assignments</span><strong>${assignments.length}</strong></div>
                     <div class="scores">
@@ -156,6 +193,7 @@
                     <ul>${badgeList}</ul>
                     <div><strong>Assignments</strong></div>
                     <ul>${assignmentList}</ul>
+                    ${hurryBtn}
                 </section>
             `;
         }

@@ -51,6 +51,7 @@ class TildateamApp(app.App):
 		self.notification = None
 		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
+		self._cancel_down_event = None
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -89,6 +90,7 @@ class TildateamApp(app.App):
 		if self._is_cancel(event):
 			if self.session.in_game and self.session.cancel_hold_start is None:
 				self.session.cancel_hold_start = time.ticks_ms()
+				self._cancel_down_event = event
 			return
 
 		if self.session.room_state == "waiting":
@@ -100,7 +102,15 @@ class TildateamApp(app.App):
 
 	def _on_button_up(self, event):
 		if self._is_cancel(event):
+			if (self.session.cancel_hold_start is not None
+					and self.session.in_round
+					and self.session.expected_module is not None
+					and self._cancel_down_event is not None):
+				held = time.ticks_diff(time.ticks_ms(), self.session.cancel_hold_start)
+				if held < CANCEL_HOLD_MS:
+					self.session.expected_module.on_button_down(self._cancel_down_event)
 			self.session.cancel_hold_start = None
+			self._cancel_down_event = None
 
 	def _menu_items(self):
 		items = []
@@ -269,6 +279,8 @@ class TildateamApp(app.App):
 		self.session.badge_count = data.get("badge_count", 0)
 		self.session.time_remaining_s = data.get("time_remaining_s")
 		self.session.server_scores = data.get("scores", self.session.server_scores)
+		if data.get("badge_scores"):
+			self.session.badge_scores = data["badge_scores"]
 
 		if self.session.in_round:
 			self._set_assignment(data.get("assignment"))
@@ -362,11 +374,24 @@ class TildateamApp(app.App):
 	def _draw_finished(self, ctx):
 		scores = self.session.server_scores
 		ctx.rgb(0, 1, 0)
-		ctx.font_size = 22
-		ctx.move_to(0, -45).text("Round over!")
-		ctx.font_size = 18
-		ctx.move_to(0, -15).text("Pass: {}".format(scores.get("passed", 0)))
-		ctx.move_to(0, 15).text("Fail: {}".format(scores.get("failed", 0)))
-		ctx.font_size = 14
-		ctx.rgb(0.5, 0.5, 0.5)
-		ctx.move_to(0, 50).text("Press any button to continue")
+		ctx.font_size = 20
+		ctx.move_to(0, -55).text("Round over!")
+		ctx.font_size = 16
+		ctx.move_to(0, -32).text("Team: {} pass  {} fail".format(
+			scores.get("passed", 0), scores.get("failed", 0),
+		))
+		badge_scores = self.session.badge_scores
+		if badge_scores:
+			ctx.font_size = 11
+			ctx.rgb(0.5, 0.8, 0.5)
+			y = -10
+			for colour in sorted(badge_scores):
+				s = badge_scores[colour]
+				marker = "*" if colour == self.session.badge_colour else " "
+				ctx.move_to(0, y).text("{}{}: {} / {}".format(
+					marker, colour[0].upper() + colour[1:], s.get("passed", 0), s.get("failed", 0),
+				))
+				y += 14
+		ctx.font_size = 10
+		ctx.rgb(0.4, 0.4, 0.4)
+		ctx.move_to(0, 74).text("press any button to continue")
