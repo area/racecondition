@@ -17,11 +17,13 @@ from .room_client import RoomClient
 from .session import GameSession
 
 BADGE_COLOURS = {
-    "red": (40, 0, 0),
-    "green": (0, 40, 0),
-    "blue": (0, 0, 40),
+    "red":    (40,  0,  0),
+    "green":  ( 0, 40,  0),
+    "blue":   ( 0,  0, 40),
+    "yellow": (30, 30,  0),
+    "purple": (25,  0, 25),
+    "orange": (40, 15,  0),
 }
-
 
 CANCEL_HOLD_MS = 4000
 ROOM_COUNT = 5
@@ -38,8 +40,8 @@ def _build_badge_id():
 		return "badge-{}".format(time.ticks_ms())
 
 
-class ExampleApp(app.App):
-	def __init__(self):
+class TildateamApp(app.App):
+	def __init__(self, room_client=None):
 		self.button_states = Buttons(self)
 		self.badge_id = _build_badge_id()
 		self.session = GameSession()
@@ -47,7 +49,7 @@ class ExampleApp(app.App):
 		self.module_registry = ModuleRegistry()
 		self._network_error_shown = False
 		self.notification = None
-		self.room_client = RoomClient()
+		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
 		self._scan()
 		self._ensure_menu()
@@ -84,10 +86,16 @@ class ExampleApp(app.App):
 		return button.name.lower() == "cancel"
 
 	def _on_button_down(self, event):
-		if self._is_cancel(event) and self.session.in_game:
-			if self.session.cancel_hold_start is None:
+		if self._is_cancel(event):
+			if self.session.in_game and self.session.cancel_hold_start is None:
 				self.session.cancel_hold_start = time.ticks_ms()
-		if self.session.in_game and self.session.expected_module:
+			return
+
+		if self.session.room_state == "waiting":
+			self._start_round()
+		elif self.session.room_state == "finished":
+			self._dismiss_score()
+		elif self.session.in_round and self.session.expected_module:
 			self.session.expected_module.on_button_down(event)
 
 	def _on_button_up(self, event):
@@ -150,7 +158,7 @@ class ExampleApp(app.App):
 			self.menu._cleanup()
 			self.menu = None
 		self._network_error_shown = False
-		self.session.start_room(room_id, time.time())
+		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
 		if self.room_client.available():
 			_, error = self.room_client.join_room(
@@ -161,6 +169,25 @@ class ExampleApp(app.App):
 			if error:
 				self.notification = Notification("Join failed: {}".format(error))
 		self._poll_server(force=True)
+
+	def _start_round(self):
+		if not self.room_client.available():
+			return
+		_, error = self.room_client.start_round(self.session.room_id, self.badge_id)
+		if error:
+			self.notification = Notification("Start failed: {}".format(error))
+		else:
+			self._poll_server(force=True)
+
+	def _dismiss_score(self):
+		if not self.room_client.available():
+			self.session.set_room_state("waiting")
+			return
+		_, error = self.room_client.dismiss_score(self.session.room_id, self.badge_id)
+		if error:
+			self.notification = Notification("Dismiss failed: {}".format(error))
+		else:
+			self._poll_server(force=True)
 
 	def _set_assignment(self, assignment):
 		if not assignment:
@@ -238,8 +265,15 @@ class ExampleApp(app.App):
 			return
 
 		self.session.pending_result = None
-		self._set_assignment(data.get("assignment"))
-		self._set_display(data.get("display"))
+		self.session.set_room_state(data.get("room_state", self.session.room_state))
+		self.session.badge_count = data.get("badge_count", 0)
+		self.session.time_remaining_s = data.get("time_remaining_s")
+		self.session.server_scores = data.get("scores", self.session.server_scores)
+
+		if self.session.in_round:
+			self._set_assignment(data.get("assignment"))
+			self._set_display(data.get("display"))
+
 		colour = data.get("colour")
 		if colour and colour != self.session.badge_colour:
 			self.session.badge_colour = colour
@@ -255,7 +289,7 @@ class ExampleApp(app.App):
 					self._ensure_menu()
 					return
 
-			if self.session.expected_module:
+			if self.session.in_round and self.session.expected_module:
 				status = self.session.expected_module.check_command()
 				if status in (CommandStatus.PASSED, CommandStatus.FAILED):
 					self.session.pending_result = self.session.build_result(status)
@@ -269,36 +303,70 @@ class ExampleApp(app.App):
 		if self.notification:
 			self.notification.update(delta)
 
-	def _format_clock(self):
-		return self.session.format_clock(time.time())
-
 	def draw(self, ctx):
 		ctx.save()
 		clear_background(ctx)
-		if self.session.in_game:
-			ctx.text_align = ctx.CENTER
-			ctx.text_baseline = ctx.MIDDLE
-			ctx.rgb(0, 1, 0)
-			ctx.font_size = 14
-			ctx.move_to(0, -58).text("Room {}  Badge {}".format(self.session.room_id, self.badge_id[-6:]))
-			ctx.font_size = 16
-			ctx.move_to(0, -38).text(self.session.display_module_name or "Waiting for room commands")
-			ctx.font_size = 24
-			ctx.move_to(0, -14).text(self.session.display_command or "...")
-			ctx.font_size = 14
-			if self.session.expected_command:
-				ctx.move_to(0, 10).text("Task assigned - use your controls")
-			else:
-				ctx.move_to(0, 10).text("Waiting for assignment")
-			ctx.font_size = 18
-			ctx.move_to(0, 30).text("Pass: {}  Fail: {}".format(self.session.score_pass, self.session.score_fail))
-			ctx.font_size = 30
-			ctx.move_to(0, 58).text(self._format_clock())
-			ctx.font_size = 12
-			modules = ", ".join(m.FRIENDLY_NAME for m in self.connected_modules)
-			ctx.move_to(0, 77).text(modules or "No modules")
+		ctx.text_align = ctx.CENTER
+		ctx.text_baseline = ctx.MIDDLE
+
+		if self.session.room_state == "waiting":
+			self._draw_waiting(ctx)
+		elif self.session.room_state == "in-round":
+			self._draw_in_round(ctx)
+		elif self.session.room_state == "finished":
+			self._draw_finished(ctx)
 		elif self.menu:
 			self.menu.draw(ctx)
+
 		if self.notification:
 			self.notification.draw(ctx)
 		ctx.restore()
+
+	def _draw_waiting(self, ctx):
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 20
+		ctx.move_to(0, -40).text("Room {}".format(self.session.room_id))
+		ctx.font_size = 14
+		ctx.move_to(0, -10).text("{} badge{} connected".format(
+			self.session.badge_count,
+			"s" if self.session.badge_count != 1 else "",
+		))
+		ctx.font_size = 16
+		ctx.move_to(0, 20).text("Press any button")
+		ctx.move_to(0, 40).text("to start round")
+		ctx.font_size = 10
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 68).text("hold cancel to leave")
+
+	def _draw_in_round(self, ctx):
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 14
+		ctx.move_to(0, -58).text("Room {}  Badge {}".format(self.session.room_id, self.badge_id[-6:]))
+		ctx.font_size = 16
+		ctx.move_to(0, -38).text(self.session.display_module_name or "Waiting for room commands")
+		ctx.font_size = 24
+		ctx.move_to(0, -14).text(self.session.display_command or "...")
+		ctx.font_size = 14
+		if self.session.expected_command:
+			ctx.move_to(0, 10).text("Task assigned - use your controls")
+		else:
+			ctx.move_to(0, 10).text("Waiting for assignment")
+		ctx.font_size = 18
+		ctx.move_to(0, 30).text("Pass: {}  Fail: {}".format(self.session.score_pass, self.session.score_fail))
+		ctx.font_size = 30
+		ctx.move_to(0, 58).text(self.session.format_remaining())
+		ctx.font_size = 12
+		modules = ", ".join(m.FRIENDLY_NAME for m in self.connected_modules)
+		ctx.move_to(0, 77).text(modules or "No modules")
+
+	def _draw_finished(self, ctx):
+		scores = self.session.server_scores
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 22
+		ctx.move_to(0, -45).text("Round over!")
+		ctx.font_size = 18
+		ctx.move_to(0, -15).text("Pass: {}".format(scores.get("passed", 0)))
+		ctx.move_to(0, 15).text("Fail: {}".format(scores.get("failed", 0)))
+		ctx.font_size = 14
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 50).text("Press any button to continue")

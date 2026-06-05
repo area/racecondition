@@ -20,11 +20,17 @@ class RoomClient:
     def available(self):
         return self._requests is not None
 
+    def _timestamp_ms(self):
+        try:
+            return time.ticks_ms()
+        except AttributeError:
+            return int(time.time() * 1000)
+
     def join_room(self, room_id, badge_id, capabilities):
         payload = {
             "badge_id": badge_id,
             "capabilities": capabilities,
-            "timestamp_ms": time.ticks_ms(),
+            "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/join".format(room_id), payload)
 
@@ -33,16 +39,30 @@ class RoomClient:
             "badge_id": badge_id,
             "capabilities": capabilities,
             "result": result,
-            "timestamp_ms": time.ticks_ms(),
+            "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/poll".format(room_id), payload)
 
     def leave_room(self, room_id, badge_id):
         payload = {
             "badge_id": badge_id,
-            "timestamp_ms": time.ticks_ms(),
+            "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/leave".format(room_id), payload)
+
+    def start_round(self, room_id, badge_id):
+        payload = {
+            "badge_id": badge_id,
+            "timestamp_ms": self._timestamp_ms(),
+        }
+        return self._post("/api/rooms/{}/start".format(room_id), payload)
+
+    def dismiss_score(self, room_id, badge_id):
+        payload = {
+            "badge_id": badge_id,
+            "timestamp_ms": self._timestamp_ms(),
+        }
+        return self._post("/api/rooms/{}/dismiss".format(room_id), payload)
 
     def _post(self, path, payload):
         if not self._requests:

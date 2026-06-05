@@ -1,6 +1,6 @@
 {
-  "callable": "ExampleApp",
-  "name": "SpaceTeam",
+  "callable": "TildateamApp",
+  "name": "Tildateam",
   "category": "unknown",
   "hidden": false,
   "path": "apps.spaceteam.app"

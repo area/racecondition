@@ -107,12 +107,14 @@ class GPSModule(HexpansionModule):
         while b"\n" in self._buffer:
             line, self._buffer = self._buffer.split(b"\n", 1)
             try:
-                decoded_line = line.decode(errors="ignore").strip()
+                decoded_line = line.decode().strip()
                 if decoded_line:
                     print("[GPS] UART line: {}".format(decoded_line))
                 result = _parse_nmea_rmc(decoded_line)
                 if result:
                     print("[GPS] Fix: lat={:.6f}, lon={:.6f}".format(result["lat"], result["lon"]))
                     self._current_pos = result
-            except Exception:
+            except Exception as e:
+                print("[GPS] Failed to parse line: {}".format(line))
+                print("[GPS] Exception:", e)
                 pass

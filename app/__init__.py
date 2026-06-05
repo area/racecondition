@@ -1,1 +1,1 @@
-from .app import ExampleApp
+from .app import TildateamApp
