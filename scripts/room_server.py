@@ -4,7 +4,7 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from room import Room
+from room import Room, LEADERBOARD_PATH
 
 HOST = "0.0.0.0"
 PORT = 8000
@@ -80,6 +80,11 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             })
             return
 
+        if self.path == "/api/leaderboard":
+            entries = json.loads(LEADERBOARD_PATH.read_text()) if LEADERBOARD_PATH.exists() else []
+            self._send_json(200, {"leaderboard": entries})
+            return
+
         self._send_json(404, {"error": "Not found"})
 
     def do_POST(self):
@@ -115,7 +120,8 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             response = room.join(badge_id, _normalize_capabilities(payload.get("capabilities")))
         elif action == "poll":
             response = room.poll(badge_id, _normalize_capabilities(payload.get("capabilities")),
-                                 result=payload.get("result"))
+                                 result=payload.get("result"),
+                                 session_token=payload.get("session_token"))
         elif action == "leave":
             response = room.leave(badge_id)
         elif action == "start":

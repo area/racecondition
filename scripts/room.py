@@ -1,10 +1,17 @@
+import json
+import math
 import random
+import secrets
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from threading import Lock
 
 STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
 COLOURS = ["red", "green", "blue", "yellow", "purple", "orange"]
+
+LEADERBOARD_PATH = Path(__file__).resolve().parent / "leaderboard.json"
 
 
 class Room:
@@ -21,13 +28,14 @@ class Room:
             self._set_badge(badge_id, capabilities)
             return self._poll_response(badge_id)
 
-    def poll(self, badge_id, capabilities, result=None):
+    def poll(self, badge_id, capabilities, result=None, session_token=None):
         with self._lock:
             self._prune_stale()
             self._set_badge(badge_id, capabilities)
             self._check_expiry()
             if result is not None and self._state == "in-round":
-                self._apply_result(badge_id, result)
+                if session_token == self._session_tokens.get(badge_id):
+                    self._apply_result(badge_id, result)
             return self._poll_response(badge_id)
 
     def leave(self, badge_id):
@@ -39,6 +47,7 @@ class Room:
             self._assignments.pop(badge_id, None)
             self._colours.pop(badge_id, None)
             self._badge_scores.pop(badge_id, None)
+            self._session_tokens.pop(badge_id, None)
             if not self._badges:
                 self._reset_state()
             elif self._state == "finished":
@@ -113,6 +122,7 @@ class Room:
         self._assignments = {}
         self._colours = {}
         self._badge_scores = {}
+        self._session_tokens = {}
         self._next_assignment_id = 1
         self._scores = {"passed": 0, "failed": 0}
         self._state = "waiting"
@@ -130,6 +140,7 @@ class Room:
             self._assignments.pop(bid, None)
             self._colours.pop(bid, None)
             self._badge_scores.pop(bid, None)
+            self._session_tokens.pop(bid, None)
             self._dismissed.discard(bid)
         if not self._badges:
             self._reset_state()
@@ -142,6 +153,8 @@ class Room:
             self._colours[badge_id] = next((c for c in COLOURS if c not in used), COLOURS[0])
         if badge_id not in self._badge_scores:
             self._badge_scores[badge_id] = {"passed": 0, "failed": 0}
+        if badge_id not in self._session_tokens:
+            self._session_tokens[badge_id] = secrets.token_hex(16)
         self._badges[badge_id] = {"capabilities": capabilities, "last_seen": self._now()}
 
     def _command_pool(self):
@@ -204,6 +217,45 @@ class Room:
         if self._now() - self._round_started_at >= ROUND_DURATION_S:
             self._state = "finished"
             self._dismissed = set()
+            self._record_score()
+
+    def _calculate_score(self):
+        num_badges = len(self._badges)
+        if num_badges == 0:
+            return 0.0
+        total_modules = sum(len(b["capabilities"]) for b in self._badges.values())
+        commands_passed = self._scores["passed"]
+        avg_modules = total_modules / num_badges
+        return round(commands_passed * math.sqrt(num_badges) * avg_modules, 2)
+
+    def _record_score(self):
+        num_badges = len(self._badges)
+        total_modules = sum(len(b["capabilities"]) for b in self._badges.values())
+        module_counts = {}
+        for b in self._badges.values():
+            for module in b["capabilities"]:
+                module_counts[module] = module_counts.get(module, 0) + 1
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "room_id": self.room_id,
+            "score": self._calculate_score(),
+            "commands_passed": self._scores["passed"],
+            "commands_failed": self._scores["failed"],
+            "num_badges": num_badges,
+            "total_modules": total_modules,
+            "badges": {
+                bid: list(b["capabilities"].keys())
+                for bid, b in self._badges.items()
+            },
+            "module_counts": module_counts,
+        }
+        try:
+            entries = json.loads(LEADERBOARD_PATH.read_text()) if LEADERBOARD_PATH.exists() else []
+            entries.append(entry)
+            entries.sort(key=lambda e: e["score"], reverse=True)
+            LEADERBOARD_PATH.write_text(json.dumps(entries, indent=2))
+        except Exception:
+            pass
 
     def _check_all_dismissed(self):
         active = set(self._badges)
@@ -230,4 +282,5 @@ class Room:
             "badge_scores": {self._colours[bid]: s for bid, s in self._badge_scores.items() if bid in self._colours},
             "badge_count": len(self._badges),
             "colour": self._colours.get(badge_id),
+            "session_token": self._session_tokens.get(badge_id),
         }

@@ -34,6 +34,20 @@ class TestJoin(unittest.TestCase):
         data = self.room.join("badge-a", {})
         self.assertIsNone(data["assignment"])
 
+    def test_join_returns_session_token(self):
+        data = self.room.join("badge-a", {})
+        self.assertIsNotNone(data["session_token"])
+
+    def test_two_badges_get_different_tokens(self):
+        a = self.room.join("badge-a", {})
+        b = self.room.join("badge-b", {})
+        self.assertNotEqual(a["session_token"], b["session_token"])
+
+    def test_rejoin_returns_same_token(self):
+        first = self.room.join("badge-a", {})["session_token"]
+        second = self.room.join("badge-a", {})["session_token"]
+        self.assertEqual(first, second)
+
 
 class TestStartRound(unittest.TestCase):
     def setUp(self):
@@ -93,40 +107,56 @@ class TestInstructionSelection(unittest.TestCase):
 class TestScoring(unittest.TestCase):
     def _setup_with_assignment(self, room_id=1):
         room = Room(room_id)
-        room.join("badge-a", GPS_CAPS)
+        token = room.join("badge-a", GPS_CAPS)["session_token"]
         room.start_round("badge-a")
-        data = room.poll("badge-a", GPS_CAPS)
-        return room, data.get("assignment")
+        data = room.poll("badge-a", GPS_CAPS, session_token=token)
+        return room, data.get("assignment"), token
 
     def test_passed_result_increments_score(self):
-        room, assignment = self._setup_with_assignment()
+        room, assignment, token = self._setup_with_assignment()
         if not assignment:
             self.skipTest("no assignment")
         result = {"assignment_id": assignment["id"], "status": "passed"}
-        data = room.poll("badge-a", GPS_CAPS, result=result)
+        data = room.poll("badge-a", GPS_CAPS, result=result, session_token=token)
         self.assertEqual(data["scores"]["passed"], 1)
 
     def test_failed_result_increments_score(self):
-        room, assignment = self._setup_with_assignment(2)
+        room, assignment, token = self._setup_with_assignment(2)
         if not assignment:
             self.skipTest("no assignment")
         result = {"assignment_id": assignment["id"], "status": "failed"}
-        data = room.poll("badge-a", GPS_CAPS, result=result)
+        data = room.poll("badge-a", GPS_CAPS, result=result, session_token=token)
         self.assertEqual(data["scores"]["failed"], 1)
 
     def test_wrong_assignment_id_is_ignored(self):
-        room, _ = self._setup_with_assignment(3)
+        room, _, token = self._setup_with_assignment(3)
         result = {"assignment_id": "stale-id", "status": "passed"}
+        data = room.poll("badge-a", GPS_CAPS, result=result, session_token=token)
+        self.assertEqual(data["scores"]["passed"], 0)
+
+    def test_wrong_token_is_ignored(self):
+        room, assignment, _ = self._setup_with_assignment(4)
+        if not assignment:
+            self.skipTest("no assignment")
+        result = {"assignment_id": assignment["id"], "status": "passed"}
+        data = room.poll("badge-a", GPS_CAPS, result=result, session_token="not-the-right-token")
+        self.assertEqual(data["scores"]["passed"], 0)
+
+    def test_missing_token_is_ignored(self):
+        room, assignment, _ = self._setup_with_assignment(5)
+        if not assignment:
+            self.skipTest("no assignment")
+        result = {"assignment_id": assignment["id"], "status": "passed"}
         data = room.poll("badge-a", GPS_CAPS, result=result)
         self.assertEqual(data["scores"]["passed"], 0)
 
     def test_per_badge_scores_tracked_by_colour(self):
-        room, assignment = self._setup_with_assignment(4)
+        room, assignment, token = self._setup_with_assignment(6)
         if not assignment:
             self.skipTest("no assignment")
-        my_colour = room.poll("badge-a", GPS_CAPS)["colour"]
+        my_colour = room.poll("badge-a", GPS_CAPS, session_token=token)["colour"]
         result = {"assignment_id": assignment["id"], "status": "passed"}
-        data = room.poll("badge-a", GPS_CAPS, result=result)
+        data = room.poll("badge-a", GPS_CAPS, result=result, session_token=token)
         self.assertEqual(data["badge_scores"][my_colour]["passed"], 1)
 
 
