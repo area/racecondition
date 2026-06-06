@@ -26,6 +26,10 @@ class GameSession:
         self.time_remaining_s = None
         self.server_scores = {"passed": 0, "failed": 0}
         self.badge_scores = {}
+        self.ready_count = 0
+        self.is_ready = False
+        self.dismissed_count = 0
+        self.is_dismissed = False
 
     @property
     def in_game(self):
@@ -86,6 +90,10 @@ class GameSession:
             self.score_pass = 0
             self.score_fail = 0
             self.badge_scores = {}
+            self.ready_count = 0
+            self.is_ready = False
+            self.dismissed_count = 0
+            self.is_dismissed = False
 
     def set_assignment(self, module, assignment_id, command, time_remaining_s=None, timeout_s=None, now_ms=None):
         self.expected_module = module
@@ -136,6 +144,14 @@ class GameSession:
         self.server_scores = data.get("scores", self.server_scores)
         if data.get("badge_scores"):
             self.badge_scores = data["badge_scores"]
+        if data.get("ready_count") is not None:
+            self.ready_count = data["ready_count"]
+        if data.get("is_ready") is not None:
+            self.is_ready = data["is_ready"]
+        if data.get("dismissed_count") is not None:
+            self.dismissed_count = data["dismissed_count"]
+        if data.get("is_dismissed") is not None:
+            self.is_dismissed = data["is_dismissed"]
         colour = data.get("colour")
         if colour and colour != self.badge_colour:
             self.badge_colour = colour

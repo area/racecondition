@@ -97,6 +97,7 @@ class TestInstructionSelection(unittest.TestCase):
         self.room.join("badge-a", GPS_CAPS)
         self.room.join("badge-b", GPS_CAPS)
         self.room.start_round("badge-a")
+        self.room.start_round("badge-b")
         # seed assignments for both badges
         self.room.poll("badge-a", GPS_CAPS)
         self.room.poll("badge-b", GPS_CAPS)
@@ -186,6 +187,7 @@ class TestStateTransitions(unittest.TestCase):
         room.join("badge-a", GPS_CAPS)
         room.join("badge-b", GPS_CAPS)
         room.start_round("badge-a")
+        room.start_round("badge-b")
         room._round_started_at -= ROUND_DURATION_S + 1
         room.poll("badge-a", GPS_CAPS)  # triggers expiry
         room.dismiss_score("badge-a")
@@ -197,6 +199,7 @@ class TestStateTransitions(unittest.TestCase):
         room.join("badge-a", GPS_CAPS)
         room.join("badge-b", GPS_CAPS)
         room.start_round("badge-a")
+        room.start_round("badge-b")
         room._round_started_at -= ROUND_DURATION_S + 1
         room.poll("badge-a", GPS_CAPS)
         data = room.dismiss_score("badge-a")

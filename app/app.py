@@ -348,8 +348,18 @@ class TildateamApp(app.App):
 			"s" if self.session.badge_count != 1 else "",
 		))
 		ctx.font_size = 16
-		ctx.move_to(0, 20).text("Press any button")
-		ctx.move_to(0, 40).text("to start round")
+		if self.session.ready_count > 0:
+			ctx.move_to(0, 20).text("{} / {} ready".format(self.session.ready_count, self.session.badge_count))
+			ctx.font_size = 12
+			if self.session.is_ready:
+				ctx.rgb(0, 0.6, 0)
+				ctx.move_to(0, 40).text("you're ready!")
+			else:
+				ctx.rgb(0.8, 0.8, 0)
+				ctx.move_to(0, 40).text("press any button")
+		else:
+			ctx.move_to(0, 20).text("Press any button")
+			ctx.move_to(0, 40).text("to start round")
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 68).text("hold cancel to leave")
@@ -408,6 +418,18 @@ class TildateamApp(app.App):
 					marker, colour[0].upper() + colour[1:], s.get("passed", 0), s.get("failed", 0),
 				))
 				y += 14
-		ctx.font_size = 10
-		ctx.rgb(0.4, 0.4, 0.4)
-		ctx.move_to(0, 74).text("press any button to continue")
+		ctx.font_size = 14
+		if self.session.dismissed_count > 0:
+			ctx.rgb(0, 1, 0)
+			ctx.move_to(0, 68).text("{} / {} ready".format(self.session.dismissed_count, self.session.badge_count))
+			ctx.font_size = 10
+			if self.session.is_dismissed:
+				ctx.rgb(0, 0.6, 0)
+				ctx.move_to(0, 82).text("you're ready")
+			else:
+				ctx.rgb(0.8, 0.8, 0)
+				ctx.move_to(0, 82).text("press any button")
+		else:
+			ctx.font_size = 10
+			ctx.rgb(0.4, 0.4, 0.4)
+			ctx.move_to(0, 74).text("press any button to continue")

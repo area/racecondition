@@ -65,10 +65,13 @@ class Room:
             self._colours.pop(badge_id, None)
             self._badge_scores.pop(badge_id, None)
             self._session_tokens.pop(badge_id, None)
+            self._ready.discard(badge_id)
             if not self._badges:
                 self._reset_state()
             elif self._state == "finished":
                 self._check_all_dismissed()
+            elif self._state == "waiting":
+                self._check_all_ready()
             badge_count = len(self._badges)
         return {"room_id": self.room_id, "status": "left", "badge_count": badge_count}
 
@@ -79,12 +82,11 @@ class Room:
                 return {"room_id": self.room_id, "error": "Round already in progress"}
             if badge_id not in self._badges:
                 return {"room_id": self.room_id, "error": "Badge not in room"}
-            self._state = "in-round"
-            self._round_started_at = self._now()
-            self._scores = {"passed": 0, "failed": 0}
-            self._badge_scores = {bid: {"passed": 0, "failed": 0} for bid in self._badges}
-            self._assignments = {}
-        return {"room_id": self.room_id, "status": "started", "room_state": "in-round"}
+            self._ready.add(badge_id)
+            if not (set(self._badges.keys()) - self._ready):
+                self._start_round_locked()
+                return {"room_id": self.room_id, "status": "started", "room_state": "in-round"}
+        return {"room_id": self.room_id, "status": "ready", "room_state": "waiting", "ready_count": len(self._ready)}
 
     def set_timer(self, seconds):
         with self._lock:
@@ -145,9 +147,22 @@ class Room:
         self._state = "waiting"
         self._round_started_at = None
         self._dismissed = set()
+        self._ready = set()
 
     def _now(self):
         return time.monotonic()
+
+    def _start_round_locked(self):
+        self._state = "in-round"
+        self._round_started_at = self._now()
+        self._scores = {"passed": 0, "failed": 0}
+        self._badge_scores = {bid: {"passed": 0, "failed": 0} for bid in self._badges}
+        self._assignments = {}
+        self._ready = set()
+
+    def _check_all_ready(self):
+        if self._state == "waiting" and self._badges and not (set(self._badges.keys()) - self._ready):
+            self._start_round_locked()
 
     def _prune_stale(self):
         cutoff = self._now() - STALE_BADGE_SECONDS
@@ -159,10 +174,14 @@ class Room:
             self._badge_scores.pop(bid, None)
             self._session_tokens.pop(bid, None)
             self._dismissed.discard(bid)
+            self._ready.discard(bid)
         if not self._badges:
             self._reset_state()
-        elif stale and self._state == "finished":
-            self._check_all_dismissed()
+        elif stale:
+            if self._state == "finished":
+                self._check_all_dismissed()
+            elif self._state == "waiting":
+                self._check_all_ready()
 
     def _set_badge(self, badge_id, capabilities):
         if badge_id not in self._colours:
@@ -321,4 +340,8 @@ class Room:
             "badge_count": len(self._badges),
             "colour": self._colours.get(badge_id),
             "session_token": self._session_tokens.get(badge_id),
+            "ready_count": len(self._ready) if self._state == "waiting" else None,
+            "is_ready": (badge_id in self._ready) if self._state == "waiting" else None,
+            "dismissed_count": len(self._dismissed) if self._state == "finished" else None,
+            "is_dismissed": (badge_id in self._dismissed) if self._state == "finished" else None,
         }
