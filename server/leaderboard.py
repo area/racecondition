@@ -11,7 +11,7 @@ class FilesystemLeaderboard:
     def record(self, entry):
         entries = json.loads(self._path.read_text()) if self._path.exists() else []
         entries.append(entry)
-        entries.sort(key=lambda e: e["score"], reverse=True)
+        entries.sort(key=lambda e: (e["score"], e.get("num_badges", 0), -e.get("commands_failed", 0)), reverse=True)
         self._path.write_text(json.dumps(entries, indent=2))
 
     def entries(self):

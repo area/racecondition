@@ -5,8 +5,6 @@ from .base import HexpansionModule, CommandStatus
 
 import imu
 
-SHAKE_TIMEOUT_MS = 8000
-
 
 class Tildagon2024Module(HexpansionModule):
     FRIENDLY_NAME = "Tildagon 2024"
@@ -51,8 +49,6 @@ class Tildagon2024Module(HexpansionModule):
             return
         if button_name == self.current_command:
             self.last_status = CommandStatus.PASSED
-        elif button_name in self.COMMAND_OPTIONS:
-            self.last_status = CommandStatus.FAILED
 
     def check_command(self):
         if self.current_command == "shake":
@@ -63,9 +59,6 @@ class Tildagon2024Module(HexpansionModule):
         print("[Tildagon] Checking shake command...")
         if self._shake_started_ms is None:
             return CommandStatus.WAITING
-        if time.ticks_diff(time.ticks_ms(), self._shake_started_ms) > SHAKE_TIMEOUT_MS:
-            print("[Tildagon] Shake command FAILED - timeout")
-            return CommandStatus.FAILED
         accel = self._read_accel_xyz()
         if self._last_accel is None:
             self._last_accel = accel

@@ -365,37 +365,34 @@ class TildateamApp(app.App):
 		ctx.move_to(0, 68).text("hold cancel to leave")
 
 	def _draw_in_round(self, ctx):
+		ctx.rgb(0.4, 0.4, 0.4)
+		ctx.font_size = 10
+		ctx.move_to(0, -68).text("Room {}  Badge {}".format(self.session.room_id, self.badge_id[-6:]))
 		ctx.rgb(0, 1, 0)
-		ctx.font_size = 14
-		ctx.move_to(0, -58).text("Room {}  Badge {}".format(self.session.room_id, self.badge_id[-6:]))
-		ctx.font_size = 16
-		ctx.move_to(0, -38).text(self.session.display_module_name or "Waiting for room commands")
+		if self.session.display_target_colour:
+			ctx.font_size = 14
+			ctx.move_to(0, -50).text(self.session.display_target_colour)
 		ctx.font_size = 24
-		ctx.move_to(0, -14).text(self.session.display_command or "...")
+		ctx.move_to(0, -30).text(self.session.display_module_name or "")
+		ctx.move_to(0, -4).text(self.session.display_command or "...")
 		frac = self._instruction_fraction()
 		if frac is not None:
 			ctx.rgb(0.2, 0.2, 0.2)
-			ctx.rectangle(-100, 0, 200, 5).fill()
+			ctx.rectangle(-100, 10, 200, 5).fill()
 			if frac > 0.5:
 				ctx.rgb(0, 0.8, 0)
 			elif frac > 0.25:
 				ctx.rgb(0.8, 0.6, 0)
 			else:
 				ctx.rgb(0.8, 0.1, 0)
-			ctx.rectangle(-100, 0, 200 * frac, 5).fill()
+			ctx.rectangle(-100, 10, 200 * frac, 5).fill()
 		ctx.rgb(0, 1, 0)
-		ctx.font_size = 14
-		if self.session.expected_command:
-			ctx.move_to(0, 10).text("Task assigned - use your controls")
-		else:
-			ctx.move_to(0, 10).text("Waiting for assignment")
-		ctx.font_size = 18
-		ctx.move_to(0, 30).text("Pass: {}  Fail: {}".format(self.session.score_pass, self.session.score_fail))
 		ctx.font_size = 30
-		ctx.move_to(0, 58).text(self.session.format_remaining())
-		ctx.font_size = 12
+		ctx.move_to(0, 52).text(self.session.format_remaining())
+		ctx.font_size = 10
+		ctx.rgb(0.5, 0.5, 0.5)
 		modules = ", ".join(m.FRIENDLY_NAME for m in self.connected_modules)
-		ctx.move_to(0, 77).text(modules or "No modules")
+		ctx.move_to(0, 72).text(modules or "No modules")
 
 	def _draw_finished(self, ctx):
 		scores = self.session.server_scores

@@ -14,6 +14,7 @@ class GameSession:
         self.assignment_updated_ms = None
         self.display_module_name = None
         self.display_command = None
+        self.display_target_colour = None
         self.display_time_remaining_s = None
         self.display_timeout_s = None
         self.display_updated_ms = None
@@ -50,6 +51,7 @@ class GameSession:
     def clear_display(self):
         self.display_module_name = None
         self.display_command = None
+        self.display_target_colour = None
         self.display_time_remaining_s = None
         self.display_timeout_s = None
         self.display_updated_ms = None
@@ -108,12 +110,9 @@ class GameSession:
             self.clear_display()
             return
         self.display_module_name = display.get("module")
-        command = display.get("command")
+        self.display_command = display.get("command")
         colour = display.get("target_colour")
-        if colour:
-            self.display_command = "{}: {}".format(colour[0].upper() + colour[1:], command)
-        else:
-            self.display_command = command
+        self.display_target_colour = colour[0].upper() + colour[1:] if colour else None
         self.display_time_remaining_s = display.get("time_remaining_s")
         self.display_timeout_s = display.get("timeout_s")
         self.display_updated_ms = now_ms

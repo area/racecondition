@@ -13,16 +13,18 @@ ROOM_IDS = tuple(range(1, 6))
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
+LEADERBOARD_HTML_PATH = SCRIPT_DIR / "leaderboard.html"
 
 
-def _load_admin_html():
+def _load_html(path, label):
     try:
-        return ADMIN_HTML_PATH.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except OSError as exc:
-        return "<h1>Admin page unavailable</h1><p>{}</p>".format(exc)
+        return "<h1>{} unavailable</h1><p>{}</p>".format(label, exc)
 
 
-ADMIN_HTML = _load_admin_html()
+ADMIN_HTML = _load_html(ADMIN_HTML_PATH, "Admin page")
+LEADERBOARD_HTML = _load_html(LEADERBOARD_HTML_PATH, "Leaderboard page")
 
 leaderboard = FilesystemLeaderboard()
 rooms = {room_id: Room(room_id, leaderboard=leaderboard) for room_id in ROOM_IDS}
@@ -55,6 +57,10 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/admin"):
             self._send_html(200, ADMIN_HTML)
+            return
+
+        if self.path == "/leaderboard":
+            self._send_html(200, LEADERBOARD_HTML)
             return
 
         if self.path == "/api/admin/status":

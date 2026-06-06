@@ -6,7 +6,6 @@ from .base import HexpansionModule, CommandStatus
 
 
 TARGET_DISTANCE_M = 5
-COMMAND_TIMEOUT_MS = 15000
 
 
 def _distance_m(lat1, lon1, lat2, lon2):
@@ -71,12 +70,6 @@ class GPSModule(HexpansionModule):
 
     def check_command(self):
         self._read_uart()
-
-        if self._command_started_ms is not None:
-            elapsed_ms = time.ticks_diff(time.ticks_ms(), self._command_started_ms)
-            if elapsed_ms >= COMMAND_TIMEOUT_MS:
-                print("[GPS] FAILED - timeout after {:.1f}s".format(elapsed_ms / 1000))
-                return CommandStatus.FAILED
 
         # If we didn't have a fix when the command was issued, latch it now
         if self._start_pos is None:

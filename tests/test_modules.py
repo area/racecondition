@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from app.hexpansion.base import CommandStatus, HexpansionModule
 from app.hexpansion.MegaDrive import MegaDriveModule
-from app.hexpansion.GPS import GPSModule, _parse_nmea_rmc, _distance_m, COMMAND_TIMEOUT_MS, TARGET_DISTANCE_M
-from app.hexpansion.Tildagon2024 import Tildagon2024Module, SHAKE_TIMEOUT_MS
+from app.hexpansion.GPS import GPSModule, _parse_nmea_rmc, _distance_m, TARGET_DISTANCE_M
+from app.hexpansion.Tildagon2024 import Tildagon2024Module
 
 
 # ── Fake button event helpers ─────────────────────────────────────────────────
@@ -42,9 +42,9 @@ class TestMegaDriveModule(unittest.TestCase):
         self.m.on_button_down(_sega("a"))
         self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
 
-    def test_wrong_button_fails(self):
+    def test_wrong_button_stays_waiting(self):
         self.m.on_button_down(_sega("b"))
-        self.assertEqual(self.m.check_command(), CommandStatus.FAILED)
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
     def test_button_from_other_group_is_ignored(self):
         self.m.on_button_down(_ttt("a"))
@@ -146,12 +146,13 @@ class TestGPSCommandStateMachine(unittest.TestCase):
         m.check_command()  # latches start_pos
         self.assertEqual(m.check_command(), CommandStatus.WAITING)
 
-    def test_fails_on_timeout(self):
+    def test_stays_waiting_when_not_moved_enough_over_time(self):
         m = self._make_module()
         m._current_pos = {"lat": 51.5, "lon": -0.1}
         m.set_command("move 5m away")
-        m._command_started_ms -= COMMAND_TIMEOUT_MS + 1
-        self.assertEqual(m.check_command(), CommandStatus.FAILED)
+        m.check_command()  # latches start_pos
+        # No client-side timeout — stays WAITING indefinitely until server expires it
+        self.assertEqual(m.check_command(), CommandStatus.WAITING)
 
 
 # ── Tildagon2024 ──────────────────────────────────────────────────────────────
@@ -170,10 +171,10 @@ class TestTildagon2024Module(unittest.TestCase):
         self.m.on_button_down(_ttt("a"))
         self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
 
-    def test_wrong_button_fails(self):
+    def test_wrong_button_stays_waiting(self):
         self.m.set_command("a")
         self.m.on_button_down(_ttt("b"))
-        self.assertEqual(self.m.check_command(), CommandStatus.FAILED)
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
     def test_button_from_other_group_ignored(self):
         self.m.set_command("a")
@@ -194,10 +195,13 @@ class TestTildagon2024Module(unittest.TestCase):
         _imu.acc_read.return_value = (0.1, 0.0, 9.8)  # tiny movement
         self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
-    def test_shake_fails_on_timeout(self):
+    def test_shake_stays_waiting_without_movement(self):
+        import imu as _imu
         self.m.set_command("shake")
-        self.m._shake_started_ms -= SHAKE_TIMEOUT_MS + 1
-        self.assertEqual(self.m.check_command(), CommandStatus.FAILED)
+        self.m.check_command()  # stores _last_accel
+        _imu.acc_read.return_value = (0.0, 0.0, 9.8)  # no change
+        # No client-side timeout — stays WAITING until server expires it
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
 
 if __name__ == "__main__":

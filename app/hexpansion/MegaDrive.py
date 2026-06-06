@@ -15,8 +15,6 @@ class MegaDriveModule(HexpansionModule):
             return
         if button_name == self.current_command:
             self.last_status = CommandStatus.PASSED
-        elif button_name in self.COMMAND_OPTIONS:
-            self.last_status = CommandStatus.FAILED
 
     def check_command(self) -> str:
         return self.last_status
