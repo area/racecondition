@@ -163,5 +163,75 @@ class TestSetDisplay(unittest.TestCase):
         self.assertEqual(self.s.display_module_name, "MegaDrive")
 
 
+class TestApplyPollResponse(unittest.TestCase):
+    def setUp(self):
+        self.s = GameSession()
+        self.s.start_room(1)
+
+    def _poll(self, **kwargs):
+        base = {
+            "room_state": "waiting",
+            "badge_count": 1,
+            "time_remaining_s": None,
+            "scores": {"passed": 0, "failed": 0},
+            "badge_scores": {},
+            "colour": "red",
+        }
+        base.update(kwargs)
+        return base
+
+    def test_sets_room_state(self):
+        self.s.apply_poll_response(self._poll(room_state="in-round"))
+        self.assertTrue(self.s.in_round)
+
+    def test_sets_badge_count(self):
+        self.s.apply_poll_response(self._poll(badge_count=3))
+        self.assertEqual(self.s.badge_count, 3)
+
+    def test_sets_time_remaining(self):
+        self.s.apply_poll_response(self._poll(time_remaining_s=90.0))
+        self.assertEqual(self.s.time_remaining_s, 90.0)
+
+    def test_sets_server_scores(self):
+        self.s.apply_poll_response(self._poll(scores={"passed": 5, "failed": 2}))
+        self.assertEqual(self.s.server_scores["passed"], 5)
+
+    def test_sets_badge_scores(self):
+        self.s.apply_poll_response(self._poll(badge_scores={"red": {"passed": 3, "failed": 1}}))
+        self.assertEqual(self.s.badge_scores["red"]["passed"], 3)
+
+    def test_clears_pending_result(self):
+        self.s.pending_result = {"assignment_id": "x", "status": "passed"}
+        self.s.apply_poll_response(self._poll())
+        self.assertIsNone(self.s.pending_result)
+
+    def test_returns_new_colour_when_changed(self):
+        result = self.s.apply_poll_response(self._poll(colour="blue"))
+        self.assertEqual(result, "blue")
+        self.assertEqual(self.s.badge_colour, "blue")
+
+    def test_returns_none_when_colour_unchanged(self):
+        self.s.badge_colour = "red"
+        result = self.s.apply_poll_response(self._poll(colour="red"))
+        self.assertIsNone(result)
+
+    def test_returns_none_when_no_colour_in_response(self):
+        data = self._poll()
+        del data["colour"]
+        result = self.s.apply_poll_response(data)
+        self.assertIsNone(result)
+
+    def test_badge_scores_not_overwritten_when_absent(self):
+        self.s.badge_scores = {"red": {"passed": 2, "failed": 0}}
+        self.s.apply_poll_response(self._poll(badge_scores={}))
+        self.assertEqual(self.s.badge_scores["red"]["passed"], 2)
+
+    def test_transition_to_waiting_clears_assignment_fields(self):
+        self.s.set_room_state("in-round")
+        self.s.set_assignment(MagicMock(), "id-1", "move 5m away")
+        self.s.apply_poll_response(self._poll(room_state="waiting"))
+        self.assertIsNone(self.s.expected_module)
+
+
 if __name__ == "__main__":
     unittest.main()

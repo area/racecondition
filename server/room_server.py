@@ -4,7 +4,8 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from room import Room, LEADERBOARD_PATH
+from room import Room
+from leaderboard import FilesystemLeaderboard
 
 HOST = "0.0.0.0"
 PORT = 8000
@@ -23,24 +24,8 @@ def _load_admin_html():
 
 ADMIN_HTML = _load_admin_html()
 
-rooms = {room_id: Room(room_id) for room_id in ROOM_IDS}
-
-
-def _normalize_capabilities(capabilities):
-    normalized = {}
-    if not isinstance(capabilities, list):
-        return normalized
-    for item in capabilities:
-        if not isinstance(item, dict):
-            continue
-        module = item.get("module")
-        commands = item.get("commands")
-        if not isinstance(module, str) or not isinstance(commands, list):
-            continue
-        cleaned = [c for c in commands if isinstance(c, str) and c]
-        if cleaned:
-            normalized[module] = tuple(cleaned)
-    return normalized
+leaderboard = FilesystemLeaderboard()
+rooms = {room_id: Room(room_id, leaderboard=leaderboard) for room_id in ROOM_IDS}
 
 
 class RoomRequestHandler(BaseHTTPRequestHandler):
@@ -81,8 +66,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/leaderboard":
-            entries = json.loads(LEADERBOARD_PATH.read_text()) if LEADERBOARD_PATH.exists() else []
-            self._send_json(200, {"leaderboard": entries})
+            self._send_json(200, {"leaderboard": leaderboard.entries()})
             return
 
         self._send_json(404, {"error": "Not found"})
@@ -117,9 +101,9 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if action == "join":
-            response = room.join(badge_id, _normalize_capabilities(payload.get("capabilities")))
+            response = room.join(badge_id, payload.get("capabilities"))
         elif action == "poll":
-            response = room.poll(badge_id, _normalize_capabilities(payload.get("capabilities")),
+            response = room.poll(badge_id, payload.get("capabilities"),
                                  result=payload.get("result"),
                                  session_token=payload.get("session_token"))
         elif action == "leave":

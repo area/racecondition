@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
+
+_scripts_dir = str(Path(__file__).parent)
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 
 _spec = importlib.util.spec_from_file_location("room", Path(__file__).parent / "room.py")
 _room_mod = importlib.util.module_from_spec(_spec)
@@ -10,12 +15,19 @@ _spec.loader.exec_module(_room_mod)
 Room = _room_mod.Room
 ROUND_DURATION_S = _room_mod.ROUND_DURATION_S
 COLOURS = _room_mod.COLOURS
-GPS_CAPS = {"GPS": ("move 5m away",)}
+
+from leaderboard import InMemoryLeaderboard
+
+GPS_CAPS = [{"module": "GPS", "commands": ["move 5m away"]}]
+
+
+def _room(room_id=1):
+    return Room(room_id, leaderboard=InMemoryLeaderboard())
 
 
 class TestJoin(unittest.TestCase):
     def setUp(self):
-        self.room = Room(1)
+        self.room = _room(1)
 
     def test_join_assigns_colour(self):
         data = self.room.join("badge-a", {})
@@ -51,7 +63,7 @@ class TestJoin(unittest.TestCase):
 
 class TestStartRound(unittest.TestCase):
     def setUp(self):
-        self.room = Room(1)
+        self.room = _room(1)
         self.room.join("badge-a", GPS_CAPS)
 
     def test_start_round_transitions_to_in_round(self):
@@ -81,7 +93,7 @@ class TestStartRound(unittest.TestCase):
 
 class TestInstructionSelection(unittest.TestCase):
     def setUp(self):
-        self.room = Room(1)
+        self.room = _room(1)
         self.room.join("badge-a", GPS_CAPS)
         self.room.join("badge-b", GPS_CAPS)
         self.room.start_round("badge-a")
@@ -97,7 +109,7 @@ class TestInstructionSelection(unittest.TestCase):
                 self.assertNotEqual(display["target_colour"], my_colour)
 
     def test_solo_badge_receives_own_instruction(self):
-        room = Room(2)
+        room = _room(2)
         room.join("solo", GPS_CAPS)
         room.start_round("solo")
         data = room.poll("solo", GPS_CAPS)
@@ -106,7 +118,7 @@ class TestInstructionSelection(unittest.TestCase):
 
 class TestScoring(unittest.TestCase):
     def _setup_with_assignment(self, room_id=1):
-        room = Room(room_id)
+        room = _room(room_id)
         token = room.join("badge-a", GPS_CAPS)["session_token"]
         room.start_round("badge-a")
         data = room.poll("badge-a", GPS_CAPS, session_token=token)
@@ -162,7 +174,7 @@ class TestScoring(unittest.TestCase):
 
 class TestStateTransitions(unittest.TestCase):
     def test_round_expires_after_duration(self):
-        room = Room(1)
+        room = _room(1)
         room.join("badge-a", GPS_CAPS)
         room.start_round("badge-a")
         room._round_started_at -= ROUND_DURATION_S + 1
@@ -170,7 +182,7 @@ class TestStateTransitions(unittest.TestCase):
         self.assertEqual(data["room_state"], "finished")
 
     def test_all_badges_dismiss_returns_to_waiting(self):
-        room = Room(1)
+        room = _room(1)
         room.join("badge-a", GPS_CAPS)
         room.join("badge-b", GPS_CAPS)
         room.start_round("badge-a")
@@ -181,7 +193,7 @@ class TestStateTransitions(unittest.TestCase):
         self.assertEqual(data["room_state"], "waiting")
 
     def test_partial_dismiss_stays_finished(self):
-        room = Room(1)
+        room = _room(1)
         room.join("badge-a", GPS_CAPS)
         room.join("badge-b", GPS_CAPS)
         room.start_round("badge-a")
@@ -191,7 +203,7 @@ class TestStateTransitions(unittest.TestCase):
         self.assertEqual(data["room_state"], "finished")
 
     def test_last_badge_leave_resets_room(self):
-        room = Room(1)
+        room = _room(1)
         room.join("badge-a", GPS_CAPS)
         room.start_round("badge-a")
         room.leave("badge-a")

@@ -1,23 +1,40 @@
-import json
 import math
 import random
 import secrets
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Lock
+
+from leaderboard import FilesystemLeaderboard
 
 STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
+ASSIGNMENT_TIMEOUT_S = 15
 COLOURS = ["red", "green", "blue", "yellow", "purple", "orange"]
 
-LEADERBOARD_PATH = Path(__file__).resolve().parent / "leaderboard.json"
+
+def _normalize_capabilities(capabilities):
+    normalized = {}
+    if not isinstance(capabilities, list):
+        return normalized
+    for item in capabilities:
+        if not isinstance(item, dict):
+            continue
+        module = item.get("module")
+        commands = item.get("commands")
+        if not isinstance(module, str) or not isinstance(commands, list):
+            continue
+        cleaned = [c for c in commands if isinstance(c, str) and c]
+        if cleaned:
+            normalized[module] = tuple(cleaned)
+    return normalized
 
 
 class Room:
-    def __init__(self, room_id):
+    def __init__(self, room_id, leaderboard=None):
         self.room_id = room_id
         self._lock = Lock()
+        self._leaderboard = leaderboard if leaderboard is not None else FilesystemLeaderboard()
         self._reset_state()
 
     # ------------------------------------------------------------------ public
@@ -25,13 +42,13 @@ class Room:
     def join(self, badge_id, capabilities):
         with self._lock:
             self._prune_stale()
-            self._set_badge(badge_id, capabilities)
+            self._set_badge(badge_id, _normalize_capabilities(capabilities))
             return self._poll_response(badge_id)
 
     def poll(self, badge_id, capabilities, result=None, session_token=None):
         with self._lock:
             self._prune_stale()
-            self._set_badge(badge_id, capabilities)
+            self._set_badge(badge_id, _normalize_capabilities(capabilities))
             self._check_expiry()
             if result is not None and self._state == "in-round":
                 if session_token == self._session_tokens.get(badge_id):
@@ -170,9 +187,22 @@ class Room:
         return badge is not None and command in badge["capabilities"].get(module, ())
 
     def _assignment_for(self, badge_id):
+        now = self._now()
         existing = self._assignments.get(badge_id)
         if existing:
-            return existing
+            age = now - existing["issued_at"]
+            if age < ASSIGNMENT_TIMEOUT_S:
+                return {
+                    "id": existing["id"],
+                    "module": existing["module"],
+                    "command": existing["command"],
+                    "time_remaining_s": ASSIGNMENT_TIMEOUT_S - age,
+                    "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
+                }
+            self._scores["failed"] += 1
+            self._badge_scores.setdefault(badge_id, {"passed": 0, "failed": 0})["failed"] += 1
+            self._assignments.pop(badge_id, None)
+
         if badge_id not in self._badges:
             return None
         candidates = [(m, c) for m, c in self._command_pool() if self._badge_can_run(badge_id, m, c)]
@@ -181,21 +211,32 @@ class Room:
         module, command = random.choice(candidates)
         assignment_id = "{}-{}".format(id(self), self._next_assignment_id)
         self._next_assignment_id += 1
-        assignment = {"id": assignment_id, "target_badge_id": badge_id,
-                      "module": module, "command": command, "issued_at": self._now()}
-        self._assignments[badge_id] = assignment
-        return assignment
+        self._assignments[badge_id] = {
+            "id": assignment_id, "target_badge_id": badge_id,
+            "module": module, "command": command, "issued_at": now,
+        }
+        return {
+            "id": assignment_id,
+            "module": module,
+            "command": command,
+            "time_remaining_s": float(ASSIGNMENT_TIMEOUT_S),
+            "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
+        }
 
     def _select_instruction(self, badge_id):
+        now = self._now()
         all_assignments = list(self._assignments.items())
         if not all_assignments:
             return None
         other = [(tid, a) for tid, a in all_assignments if tid != badge_id]
         target_id, assignment = random.choice(other if other else all_assignments)
+        time_remaining = max(0.0, ASSIGNMENT_TIMEOUT_S - (now - assignment["issued_at"]))
         return {
             "module": assignment["module"],
             "command": assignment["command"],
             "target_colour": self._colours.get(target_id),
+            "time_remaining_s": time_remaining,
+            "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
         }
 
     def _apply_result(self, badge_id, result):
@@ -250,12 +291,9 @@ class Room:
             "module_counts": module_counts,
         }
         try:
-            entries = json.loads(LEADERBOARD_PATH.read_text()) if LEADERBOARD_PATH.exists() else []
-            entries.append(entry)
-            entries.sort(key=lambda e: e["score"], reverse=True)
-            LEADERBOARD_PATH.write_text(json.dumps(entries, indent=2))
-        except Exception:
-            pass
+            self._leaderboard.record(entry)
+        except Exception as exc:
+            print("[Room] Leaderboard write failed: {}".format(exc))
 
     def _check_all_dismissed(self):
         active = set(self._badges)

@@ -9,8 +9,14 @@ class GameSession:
         self.expected_module = None
         self.expected_command_id = None
         self.expected_command = None
+        self.assignment_time_remaining_s = None
+        self.assignment_timeout_s = None
+        self.assignment_updated_ms = None
         self.display_module_name = None
         self.display_command = None
+        self.display_time_remaining_s = None
+        self.display_timeout_s = None
+        self.display_updated_ms = None
         self.pending_result = None
         self.last_poll_ms = None
         self.score_pass = 0
@@ -33,10 +39,16 @@ class GameSession:
         self.expected_module = None
         self.expected_command_id = None
         self.expected_command = None
+        self.assignment_time_remaining_s = None
+        self.assignment_timeout_s = None
+        self.assignment_updated_ms = None
 
     def clear_display(self):
         self.display_module_name = None
         self.display_command = None
+        self.display_time_remaining_s = None
+        self.display_timeout_s = None
+        self.display_updated_ms = None
 
     def start_room(self, room_id):
         self.room_id = room_id
@@ -75,12 +87,15 @@ class GameSession:
             self.score_fail = 0
             self.badge_scores = {}
 
-    def set_assignment(self, module, assignment_id, command):
+    def set_assignment(self, module, assignment_id, command, time_remaining_s=None, timeout_s=None, now_ms=None):
         self.expected_module = module
         self.expected_command_id = assignment_id
         self.expected_command = command
+        self.assignment_time_remaining_s = time_remaining_s
+        self.assignment_timeout_s = timeout_s
+        self.assignment_updated_ms = now_ms
 
-    def set_display(self, display):
+    def set_display(self, display, now_ms=None):
         if not display:
             self.clear_display()
             return
@@ -91,6 +106,9 @@ class GameSession:
             self.display_command = "{}: {}".format(colour[0].upper() + colour[1:], command)
         else:
             self.display_command = command
+        self.display_time_remaining_s = display.get("time_remaining_s")
+        self.display_timeout_s = display.get("timeout_s")
+        self.display_updated_ms = now_ms
 
     def build_result(self, status):
         if self.expected_module is None:
@@ -109,6 +127,20 @@ class GameSession:
         }
         self.clear_assignment()
         return result
+
+    def apply_poll_response(self, data):
+        self.pending_result = None
+        self.set_room_state(data.get("room_state", self.room_state))
+        self.badge_count = data.get("badge_count", 0)
+        self.time_remaining_s = data.get("time_remaining_s")
+        self.server_scores = data.get("scores", self.server_scores)
+        if data.get("badge_scores"):
+            self.badge_scores = data["badge_scores"]
+        colour = data.get("colour")
+        if colour and colour != self.badge_colour:
+            self.badge_colour = colour
+            return colour
+        return None
 
     def format_remaining(self):
         if self.time_remaining_s is None:

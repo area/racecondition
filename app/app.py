@@ -220,10 +220,15 @@ class TildateamApp(app.App):
 				self.session.clear_assignment()
 				return
 
-		self.session.set_assignment(module, assignment_id, command)
+		self.session.set_assignment(
+			module, assignment_id, command,
+			time_remaining_s=assignment.get("time_remaining_s"),
+			timeout_s=assignment.get("timeout_s"),
+			now_ms=time.ticks_ms(),
+		)
 
 	def _set_display(self, display):
-		self.session.set_display(display)
+		self.session.set_display(display, now_ms=time.ticks_ms())
 
 	def _capabilities(self):
 		return self.module_registry.get_capabilities()
@@ -274,22 +279,13 @@ class TildateamApp(app.App):
 		if data is None:
 			return
 
-		self.session.pending_result = None
-		self.session.set_room_state(data.get("room_state", self.session.room_state))
-		self.session.badge_count = data.get("badge_count", 0)
-		self.session.time_remaining_s = data.get("time_remaining_s")
-		self.session.server_scores = data.get("scores", self.session.server_scores)
-		if data.get("badge_scores"):
-			self.session.badge_scores = data["badge_scores"]
+		new_colour = self.session.apply_poll_response(data)
+		if new_colour:
+			self._set_leds(new_colour)
 
 		if self.session.in_round:
 			self._set_assignment(data.get("assignment"))
 			self._set_display(data.get("display"))
-
-		colour = data.get("colour")
-		if colour and colour != self.session.badge_colour:
-			self.session.badge_colour = colour
-			self._set_leds(colour)
 
 	def update(self, delta):
 		if self.session.in_game:
@@ -334,6 +330,14 @@ class TildateamApp(app.App):
 			self.notification.draw(ctx)
 		ctx.restore()
 
+	def _instruction_fraction(self):
+		s = self.session
+		if s.display_time_remaining_s is None or s.display_timeout_s is None or s.display_updated_ms is None:
+			return None
+		elapsed_s = time.ticks_diff(time.ticks_ms(), s.display_updated_ms) / 1000
+		remaining = s.display_time_remaining_s - elapsed_s
+		return max(0.0, min(1.0, remaining / s.display_timeout_s))
+
 	def _draw_waiting(self, ctx):
 		ctx.rgb(0, 1, 0)
 		ctx.font_size = 20
@@ -358,6 +362,18 @@ class TildateamApp(app.App):
 		ctx.move_to(0, -38).text(self.session.display_module_name or "Waiting for room commands")
 		ctx.font_size = 24
 		ctx.move_to(0, -14).text(self.session.display_command or "...")
+		frac = self._instruction_fraction()
+		if frac is not None:
+			ctx.rgb(0.2, 0.2, 0.2)
+			ctx.rectangle(-100, 0, 200, 5).fill()
+			if frac > 0.5:
+				ctx.rgb(0, 0.8, 0)
+			elif frac > 0.25:
+				ctx.rgb(0.8, 0.6, 0)
+			else:
+				ctx.rgb(0.8, 0.1, 0)
+			ctx.rectangle(-100, 0, 200 * frac, 5).fill()
+		ctx.rgb(0, 1, 0)
 		ctx.font_size = 14
 		if self.session.expected_command:
 			ctx.move_to(0, 10).text("Task assigned - use your controls")
