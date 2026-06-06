@@ -26,6 +26,7 @@ BADGE_COLOURS = {
 }
 
 CANCEL_HOLD_MS = 4000
+TEST_SKIP_HOLD_MS = 2000
 ROOM_COUNT = 5
 SERVER_POLL_INTERVAL_MS = 750
 
@@ -52,6 +53,13 @@ class TildateamApp(app.App):
 		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
 		self._cancel_down_event = None
+		self._test_state = None  # "command" | "summary" | None
+		self._test_items = []
+		self._test_index = 0
+		self._test_passed = 0
+		self._test_skipped = 0
+		self._test_cancel_hold_start = None
+		self._test_cancel_down_event = None
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -88,12 +96,20 @@ class TildateamApp(app.App):
 
 	def _on_button_down(self, event):
 		if self._is_cancel(event):
-			if self.session.in_game and self.session.cancel_hold_start is None:
+			if self._test_state == "command" and self._test_cancel_hold_start is None:
+				self._test_cancel_hold_start = time.ticks_ms()
+				self._test_cancel_down_event = event
+			elif self.session.in_game and self.session.cancel_hold_start is None:
 				self.session.cancel_hold_start = time.ticks_ms()
 				self._cancel_down_event = event
 			return
 
-		if self.session.room_state == "waiting":
+		if self._test_state == "command":
+			module, _ = self._test_items[self._test_index]
+			module.on_button_down(event)
+		elif self._test_state == "summary":
+			self._end_testing()
+		elif self.session.room_state == "waiting":
 			self._start_round()
 		elif self.session.room_state == "finished":
 			self._dismiss_score()
@@ -102,6 +118,17 @@ class TildateamApp(app.App):
 
 	def _on_button_up(self, event):
 		if self._is_cancel(event):
+			if self._test_state is not None:
+				if (self._test_state == "command"
+						and self._test_cancel_hold_start is not None
+						and self._test_cancel_down_event is not None):
+					held = time.ticks_diff(time.ticks_ms(), self._test_cancel_hold_start)
+					if held < TEST_SKIP_HOLD_MS:
+						module, _ = self._test_items[self._test_index]
+						module.on_button_down(self._test_cancel_down_event)
+				self._test_cancel_hold_start = None
+				self._test_cancel_down_event = None
+				return
 			if (self.session.cancel_hold_start is not None
 					and self.session.in_round
 					and self.session.expected_module is not None
@@ -116,6 +143,7 @@ class TildateamApp(app.App):
 		items = []
 		for room in range(1, ROOM_COUNT + 1):
 			items.append("Join Room {}".format(room))
+		items.append("Test modules")
 		items.append("Quit")
 		return items
 
@@ -123,6 +151,8 @@ class TildateamApp(app.App):
 		if item.startswith("Join Room "):
 			room = int(item.split(" ")[-1])
 			self._start_room(room)
+		elif item == "Test modules":
+			self._start_testing()
 		elif item == "Quit":
 			self._leave_room()
 			self.session.stop_room()
@@ -198,6 +228,53 @@ class TildateamApp(app.App):
 			self.notification = Notification("Dismiss failed: {}".format(error))
 		else:
 			self._poll_server(force=True)
+
+	def _start_testing(self):
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
+		items = [(m, cmd) for m in self.connected_modules for cmd in m.COMMAND_OPTIONS]
+		if not items:
+			self.notification = Notification("No modules connected")
+			return
+		self._test_items = items
+		self._test_index = 0
+		self._test_passed = 0
+		self._test_skipped = 0
+		self._test_cancel_hold_start = None
+		self._test_state = "command"
+		module, command = self._test_items[0]
+		module.set_command(command)
+
+	def _end_testing(self):
+		self._test_state = None
+		self._test_items = []
+		self._test_cancel_hold_start = None
+		self._test_cancel_down_event = None
+
+	def _test_advance(self):
+		self._test_index += 1
+		if self._test_index >= len(self._test_items):
+			self._test_state = "summary"
+		else:
+			module, command = self._test_items[self._test_index]
+			module.set_command(command)
+
+	def _update_testing(self):
+		if self._test_state != "command":
+			return
+		if self._test_cancel_hold_start is not None:
+			held = time.ticks_diff(time.ticks_ms(), self._test_cancel_hold_start)
+			if held >= TEST_SKIP_HOLD_MS:
+				self._test_skipped += 1
+				self._test_cancel_hold_start = None
+				self._test_cancel_down_event = None
+				self._test_advance()
+				return
+		module, _ = self._test_items[self._test_index]
+		if module.check_command() == CommandStatus.PASSED:
+			self._test_passed += 1
+			self._test_advance()
 
 	def _set_assignment(self, assignment):
 		if not assignment:
@@ -288,7 +365,9 @@ class TildateamApp(app.App):
 			self._set_display(data.get("display"))
 
 	def update(self, delta):
-		if self.session.in_game:
+		if self._test_state is not None:
+			self._update_testing()
+		elif self.session.in_game:
 			if self.session.cancel_hold_start is not None:
 				held = time.ticks_diff(time.ticks_ms(), self.session.cancel_hold_start)
 				if held >= CANCEL_HOLD_MS:
@@ -317,7 +396,11 @@ class TildateamApp(app.App):
 		ctx.text_align = ctx.CENTER
 		ctx.text_baseline = ctx.MIDDLE
 
-		if self.session.room_state == "waiting":
+		if self._test_state == "command":
+			self._draw_testing_command(ctx)
+		elif self._test_state == "summary":
+			self._draw_testing_summary(ctx)
+		elif self.session.room_state == "waiting":
 			self._draw_waiting(ctx)
 		elif self.session.room_state == "in-round":
 			self._draw_in_round(ctx)
@@ -393,6 +476,30 @@ class TildateamApp(app.App):
 		ctx.rgb(0.5, 0.5, 0.5)
 		modules = ", ".join(m.FRIENDLY_NAME for m in self.connected_modules)
 		ctx.move_to(0, 72).text(modules or "No modules")
+
+	def _draw_testing_command(self, ctx):
+		module, command = self._test_items[self._test_index]
+		total = len(self._test_items)
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 12
+		ctx.move_to(0, -68).text("Testing {}/{}".format(self._test_index + 1, total))
+		ctx.font_size = 24
+		ctx.move_to(0, -30).text(module.FRIENDLY_NAME)
+		ctx.move_to(0, -4).text(command)
+		ctx.font_size = 10
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 68).text("hold cancel to skip")
+
+	def _draw_testing_summary(self, ctx):
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 20
+		ctx.move_to(0, -40).text("Test complete!")
+		ctx.font_size = 16
+		ctx.move_to(0, -10).text("{} passed".format(self._test_passed))
+		ctx.move_to(0, 15).text("{} skipped".format(self._test_skipped))
+		ctx.font_size = 10
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 55).text("press any button")
 
 	def _draw_finished(self, ctx):
 		scores = self.session.server_scores

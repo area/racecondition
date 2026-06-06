@@ -140,9 +140,10 @@ class TestSetDisplay(unittest.TestCase):
         self.assertIsNone(self.s.display_module_name)
         self.assertIsNone(self.s.display_command)
 
-    def test_colour_is_capitalised_and_prefixed(self):
+    def test_colour_is_capitalised(self):
         self.s.set_display({"module": "GPS", "command": "move 5m away", "target_colour": "red"})
-        self.assertEqual(self.s.display_command, "Red: move 5m away")
+        self.assertEqual(self.s.display_target_colour, "Red")
+        self.assertEqual(self.s.display_command, "move 5m away")
 
     def test_colour_capitalisation_uses_no_str_capitalize(self):
         # MicroPython does not implement str.capitalize() — verify the
