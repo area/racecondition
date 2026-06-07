@@ -241,94 +241,12 @@
             }
         }
 
-        function selectionOffset(root, node, offset) {
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-            let total = 0;
-            while (walker.nextNode()) {
-                const textNode = walker.currentNode;
-                if (textNode === node) {
-                    return total + Math.min(offset, textNode.textContent.length);
-                }
-                total += textNode.textContent.length;
-            }
-            return -1;
-        }
-
-        function nodeAtOffset(root, offset) {
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-            let total = 0;
-            while (walker.nextNode()) {
-                const textNode = walker.currentNode;
-                const len = textNode.textContent.length;
-                if (offset <= total + len) {
-                    return { node: textNode, offset: Math.max(0, offset - total) };
-                }
-                total += len;
-            }
-
-            if (root.lastChild && root.lastChild.nodeType === Node.TEXT_NODE) {
-                return { node: root.lastChild, offset: root.lastChild.textContent.length };
-            }
-
-            const fallback = document.createTextNode("");
-            root.appendChild(fallback);
-            return { node: fallback, offset: 0 };
-        }
-
-        function captureSelection(root) {
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-                return null;
-            }
-
-            const anchorNode = sel.anchorNode;
-            const focusNode = sel.focusNode;
-            if (!root.contains(anchorNode) || !root.contains(focusNode)) {
-                return null;
-            }
-
-            const anchor = selectionOffset(root, anchorNode, sel.anchorOffset);
-            const focus = selectionOffset(root, focusNode, sel.focusOffset);
-            if (anchor < 0 || focus < 0) {
-                return null;
-            }
-
-            return {
-                anchor,
-                focus,
-            };
-        }
-
-        function restoreSelection(root, state) {
-            if (!state) {
-                return;
-            }
-
-            const anchorPos = nodeAtOffset(root, state.anchor);
-            const focusPos = nodeAtOffset(root, state.focus);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.setBaseAndExtent(
-                anchorPos.node,
-                anchorPos.offset,
-                focusPos.node,
-                focusPos.offset
-            );
-        }
-
         async function refresh() {
             try {
-                const selectedText = window.getSelection() ? String(window.getSelection()) : "";
-                const selectionState = captureSelection(roomsEl);
                 const response = await fetch('/api/admin/status');
                 const data = await response.json();
                 updateRooms(data.rooms || []);
-                restoreSelection(roomsEl, selectionState);
-                const selecting = selectedText && selectedText.length > 0;
                 updatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()} | Active badges: ${data.total_badges}`;
-                if (selecting) {
-                    updatedEl.textContent += " | Selection preserved";
-                }
             } catch (err) {
                 updatedEl.textContent = `Admin fetch failed: ${err}`;
             }
