@@ -1,4 +1,5 @@
 import math
+import random
 import time
 
 from .base import HexpansionModule, CommandStatus
@@ -17,15 +18,29 @@ class Tildagon2024Module(HexpansionModule):
         super().reset()
         self._shake_started_ms = None
         self._last_accel = None
+        self._has_hexpansions = False
 
     def is_connected(self, hexpansions):
-        # This module is always available on the badge itself.
+        self._has_hexpansions = any(v["known"] for v in hexpansions.values())
         return True
 
+    def _safe_commands(self):
+        if self._has_hexpansions:
+            return [c for c in self.COMMAND_OPTIONS if c != "shake"]
+        return list(self.COMMAND_OPTIONS)
+
     def generate_command(self):
-        command = super().generate_command()
+        command = random.choice(self._safe_commands())
+        self.current_command = command
+        self.last_status = CommandStatus.WAITING
         self._setup_command(command)
         return command
+
+    def get_capabilities(self):
+        return {
+            "module": self.FRIENDLY_NAME,
+            "commands": self._safe_commands(),
+        }
 
     def set_command(self, command):
         result = super().set_command(command)

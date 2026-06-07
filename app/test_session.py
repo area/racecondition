@@ -12,7 +12,7 @@ def _is_cancel(event):
 
 class TestSession:
     def __init__(self, modules):
-        self._items = [(m, cmd) for m in modules for cmd in m.COMMAND_OPTIONS]
+        self._items = [(m, cmd) for m in modules for cmd in m.get_capabilities()["commands"]]
         self._index = 0
         self._passed = 0
         self._skipped = 0

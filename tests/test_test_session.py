@@ -10,6 +10,7 @@ def _make_module(name, commands):
     m = MagicMock()
     m.FRIENDLY_NAME = name
     m.COMMAND_OPTIONS = commands
+    m.get_capabilities.return_value = {"module": name, "commands": list(commands)}
     m.check_command.return_value = CommandStatus.WAITING
     return m
 
@@ -25,6 +26,12 @@ def _btn(name="a", group="TwentyTwentyFour"):
 
 def _cancel():
     return _btn("cancel")
+
+
+def _make_module_filtered(name, all_commands, active_commands):
+    m = _make_module(name, all_commands)
+    m.get_capabilities.return_value = {"module": name, "commands": list(active_commands)}
+    return m
 
 
 class TestTestSessionInit(unittest.TestCase):
@@ -54,6 +61,13 @@ class TestTestSessionInit(unittest.TestCase):
         ts = TestSession([m])
         self.assertIs(ts.current_module, m)
         self.assertEqual(ts.current_command, "a")
+
+    def test_shake_excluded_when_capabilities_omit_it(self):
+        m = _make_module_filtered("Tildagon 2024", ["a", "shake"], ["a"])
+        ts = TestSession([m])
+        commands = [cmd for _, cmd in ts._items]
+        self.assertNotIn("shake", commands)
+        self.assertIn("a", commands)
 
     def test_index_and_totals_start_at_zero(self):
         m = _make_module("MegaDrive", ["a"])
