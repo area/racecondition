@@ -233,6 +233,87 @@ class TestApplyPollResponse(unittest.TestCase):
         self.s.apply_poll_response(self._poll(room_state="waiting"))
         self.assertIsNone(self.s.expected_module)
 
+    def test_stores_session_token(self):
+        self.s.apply_poll_response(self._poll(session_token="tok-abc"))
+        self.assertEqual(self.s.session_token, "tok-abc")
+
+    def test_session_token_not_overwritten_by_absent(self):
+        self.s.session_token = "existing"
+        self.s.apply_poll_response(self._poll())
+        self.assertEqual(self.s.session_token, "existing")
+
+
+class TestApplyPollResponseAssignment(unittest.TestCase):
+    def setUp(self):
+        self.s = GameSession()
+        self.s.start_room(1)
+        self.s.set_room_state("in-round")
+        self.module = MagicMock()
+        self.module.FRIENDLY_NAME = "MegaDrive"
+        self.module.COMMAND_OPTIONS = ["a", "b"]
+        self.lookup = lambda name: self.module if name == "MegaDrive" else None
+
+    def _poll_in_round(self, assignment=None, display=None):
+        return {
+            "room_state": "in-round",
+            "badge_count": 1,
+            "time_remaining_s": 60.0,
+            "scores": {"passed": 0, "failed": 0},
+            "badge_scores": {},
+            "colour": "red",
+            "assignment": assignment,
+            "display": display,
+        }
+
+    def test_assignment_sets_expected_module(self):
+        data = self._poll_in_round(assignment={
+            "id": "x1", "module": "MegaDrive", "command": "a",
+            "time_remaining_s": 10.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertIs(self.s.expected_module, self.module)
+        self.assertEqual(self.s.expected_command, "a")
+
+    def test_unknown_module_clears_assignment(self):
+        data = self._poll_in_round(assignment={
+            "id": "x1", "module": "Unknown", "command": "a",
+            "time_remaining_s": 10.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertIsNone(self.s.expected_module)
+
+    def test_no_assignment_clears(self):
+        self.s.set_assignment(self.module, "old", "a")
+        data = self._poll_in_round(assignment=None)
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertIsNone(self.s.expected_module)
+
+    def test_same_assignment_id_does_not_call_set_command_again(self):
+        self.s.set_assignment(self.module, "x1", "a")
+        data = self._poll_in_round(assignment={
+            "id": "x1", "module": "MegaDrive", "command": "a",
+            "time_remaining_s": 9.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.module.set_command.assert_not_called()
+
+    def test_assignment_ignored_without_module_lookup(self):
+        data = self._poll_in_round(assignment={
+            "id": "x1", "module": "MegaDrive", "command": "a",
+            "time_remaining_s": 10.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0)
+        self.assertIsNone(self.s.expected_module)
+
+    def test_display_set_when_in_round(self):
+        data = self._poll_in_round(display={
+            "module": "GPS", "command": "move 5m away",
+            "target_colour": "blue", "time_remaining_s": 10.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertEqual(self.s.display_module_name, "GPS")
+        self.assertEqual(self.s.display_target_colour, "Blue")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,7 @@ from .hexpansion_names import get_friendly_name
 from .hexpansion import ModuleRegistry, CommandStatus
 from .room_client import RoomClient
 from .session import GameSession
+from .test_session import TestSession
 
 BADGE_COLOURS = {
     "red":    (40,  0,  0),
@@ -26,7 +27,6 @@ BADGE_COLOURS = {
 }
 
 CANCEL_HOLD_MS = 4000
-TEST_SKIP_HOLD_MS = 2000
 ROOM_COUNT = 5
 SERVER_POLL_INTERVAL_MS = 750
 
@@ -53,13 +53,7 @@ class TildateamApp(app.App):
 		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
 		self._cancel_down_event = None
-		self._test_state = None  # "command" | "summary" | None
-		self._test_items = []
-		self._test_index = 0
-		self._test_passed = 0
-		self._test_skipped = 0
-		self._test_cancel_hold_start = None
-		self._test_cancel_down_event = None
+		self._test_session = None
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -95,21 +89,17 @@ class TildateamApp(app.App):
 		return button.name.lower() == "cancel"
 
 	def _on_button_down(self, event):
+		if self._test_session is not None:
+			self._test_session.on_button_down(event)
+			return
+
 		if self._is_cancel(event):
-			if self._test_state == "command" and self._test_cancel_hold_start is None:
-				self._test_cancel_hold_start = time.ticks_ms()
-				self._test_cancel_down_event = event
-			elif self.session.in_game and self.session.cancel_hold_start is None:
+			if self.session.in_game and self.session.cancel_hold_start is None:
 				self.session.cancel_hold_start = time.ticks_ms()
 				self._cancel_down_event = event
 			return
 
-		if self._test_state == "command":
-			module, _ = self._test_items[self._test_index]
-			module.on_button_down(event)
-		elif self._test_state == "summary":
-			self._end_testing()
-		elif self.session.room_state == "waiting":
+		if self.session.room_state == "waiting":
 			self._start_round()
 		elif self.session.room_state == "finished":
 			self._dismiss_score()
@@ -117,18 +107,11 @@ class TildateamApp(app.App):
 			self.session.expected_module.on_button_down(event)
 
 	def _on_button_up(self, event):
+		if self._test_session is not None:
+			self._test_session.on_button_up(event)
+			return
+
 		if self._is_cancel(event):
-			if self._test_state is not None:
-				if (self._test_state == "command"
-						and self._test_cancel_hold_start is not None
-						and self._test_cancel_down_event is not None):
-					held = time.ticks_diff(time.ticks_ms(), self._test_cancel_hold_start)
-					if held < TEST_SKIP_HOLD_MS:
-						module, _ = self._test_items[self._test_index]
-						module.on_button_down(self._test_cancel_down_event)
-				self._test_cancel_hold_start = None
-				self._test_cancel_down_event = None
-				return
 			if (self.session.cancel_hold_start is not None
 					and self.session.in_round
 					and self.session.expected_module is not None
@@ -201,19 +184,24 @@ class TildateamApp(app.App):
 		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
 		if self.room_client.available():
-			_, error = self.room_client.join_room(
+			data, error = self.room_client.join_room(
 				self.session.room_id,
 				self.badge_id,
 				self._capabilities(),
 			)
 			if error:
 				self.notification = Notification("Join failed: {}".format(error))
+			elif data:
+				self.session.session_token = data.get("session_token")
 		self._poll_server(force=True)
 
 	def _start_round(self):
 		if not self.room_client.available():
 			return
-		_, error = self.room_client.start_round(self.session.room_id, self.badge_id)
+		_, error = self.room_client.start_round(
+			self.session.room_id, self.badge_id,
+			session_token=self.session.session_token,
+		)
 		if error:
 			self.notification = Notification("Start failed: {}".format(error))
 		else:
@@ -223,7 +211,10 @@ class TildateamApp(app.App):
 		if not self.room_client.available():
 			self.session.set_room_state("waiting")
 			return
-		_, error = self.room_client.dismiss_score(self.session.room_id, self.badge_id)
+		_, error = self.room_client.dismiss_score(
+			self.session.room_id, self.badge_id,
+			session_token=self.session.session_token,
+		)
 		if error:
 			self.notification = Notification("Dismiss failed: {}".format(error))
 		else:
@@ -233,79 +224,11 @@ class TildateamApp(app.App):
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
-		items = [(m, cmd) for m in self.connected_modules for cmd in m.COMMAND_OPTIONS]
-		if not items:
+		ts = TestSession(self.connected_modules)
+		if ts.state == "done":
 			self.notification = Notification("No modules connected")
 			return
-		self._test_items = items
-		self._test_index = 0
-		self._test_passed = 0
-		self._test_skipped = 0
-		self._test_cancel_hold_start = None
-		self._test_state = "command"
-		module, command = self._test_items[0]
-		module.set_command(command)
-
-	def _end_testing(self):
-		self._test_state = None
-		self._test_items = []
-		self._test_cancel_hold_start = None
-		self._test_cancel_down_event = None
-
-	def _test_advance(self):
-		self._test_index += 1
-		if self._test_index >= len(self._test_items):
-			self._test_state = "summary"
-		else:
-			module, command = self._test_items[self._test_index]
-			module.set_command(command)
-
-	def _update_testing(self):
-		if self._test_state != "command":
-			return
-		if self._test_cancel_hold_start is not None:
-			held = time.ticks_diff(time.ticks_ms(), self._test_cancel_hold_start)
-			if held >= TEST_SKIP_HOLD_MS:
-				self._test_skipped += 1
-				self._test_cancel_hold_start = None
-				self._test_cancel_down_event = None
-				self._test_advance()
-				return
-		module, _ = self._test_items[self._test_index]
-		if module.check_command() == CommandStatus.PASSED:
-			self._test_passed += 1
-			self._test_advance()
-
-	def _set_assignment(self, assignment):
-		if not assignment:
-			self.session.clear_assignment()
-			return
-
-		module_name = assignment.get("module")
-		command = assignment.get("command")
-		assignment_id = assignment.get("id")
-
-		module = self._module_by_name(module_name)
-		if not module:
-			self.session.clear_assignment()
-			return
-
-		if self.session.expected_command_id != assignment_id:
-			try:
-				module.set_command(command)
-			except Exception:
-				self.session.clear_assignment()
-				return
-
-		self.session.set_assignment(
-			module, assignment_id, command,
-			time_remaining_s=assignment.get("time_remaining_s"),
-			timeout_s=assignment.get("timeout_s"),
-			now_ms=time.ticks_ms(),
-		)
-
-	def _set_display(self, display):
-		self.session.set_display(display, now_ms=time.ticks_ms())
+		self._test_session = ts
 
 	def _capabilities(self):
 		return self.module_registry.get_capabilities()
@@ -323,6 +246,7 @@ class TildateamApp(app.App):
 			_, error = self.room_client.leave_room(
 				self.session.room_id,
 				self.badge_id,
+				session_token=self.session.session_token,
 			)
 			if error:
 				print("[App] Leave failed: {}".format(error))
@@ -349,6 +273,7 @@ class TildateamApp(app.App):
 			self.badge_id,
 			self._capabilities(),
 			result=self.session.pending_result,
+			session_token=self.session.session_token,
 		)
 		if error:
 			self.notification = Notification("Server error: {}".format(error))
@@ -356,17 +281,19 @@ class TildateamApp(app.App):
 		if data is None:
 			return
 
-		new_colour = self.session.apply_poll_response(data)
+		new_colour = self.session.apply_poll_response(
+			data,
+			now_ms=time.ticks_ms(),
+			module_lookup=self._module_by_name,
+		)
 		if new_colour:
 			self._set_leds(new_colour)
 
-		if self.session.in_round:
-			self._set_assignment(data.get("assignment"))
-			self._set_display(data.get("display"))
-
 	def update(self, delta):
-		if self._test_state is not None:
-			self._update_testing()
+		if self._test_session is not None:
+			self._test_session.update()
+			if self._test_session.state == "done":
+				self._test_session = None
 		elif self.session.in_game:
 			if self.session.cancel_hold_start is not None:
 				held = time.ticks_diff(time.ticks_ms(), self.session.cancel_hold_start)
@@ -396,10 +323,11 @@ class TildateamApp(app.App):
 		ctx.text_align = ctx.CENTER
 		ctx.text_baseline = ctx.MIDDLE
 
-		if self._test_state == "command":
-			self._draw_testing_command(ctx)
-		elif self._test_state == "summary":
-			self._draw_testing_summary(ctx)
+		if self._test_session is not None:
+			if self._test_session.state == "command":
+				self._draw_testing_command(ctx)
+			elif self._test_session.state == "summary":
+				self._draw_testing_summary(ctx)
 		elif self.session.room_state == "waiting":
 			self._draw_waiting(ctx)
 		elif self.session.room_state == "in-round":
@@ -478,50 +406,63 @@ class TildateamApp(app.App):
 		ctx.move_to(0, 72).text(modules or "No modules")
 
 	def _draw_testing_command(self, ctx):
-		module, command = self._test_items[self._test_index]
-		total = len(self._test_items)
+		ts = self._test_session
 		ctx.rgb(0, 1, 0)
 		ctx.font_size = 12
-		ctx.move_to(0, -68).text("Testing {}/{}".format(self._test_index + 1, total))
+		ctx.move_to(0, -68).text("Testing {}/{}".format(ts.index + 1, ts.total))
 		ctx.font_size = 24
-		ctx.move_to(0, -30).text(module.FRIENDLY_NAME)
-		ctx.move_to(0, -4).text(command)
+		ctx.move_to(0, -30).text(ts.current_module.FRIENDLY_NAME)
+		ctx.move_to(0, -4).text(ts.current_command)
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 68).text("hold cancel to skip")
 
 	def _draw_testing_summary(self, ctx):
+		ts = self._test_session
 		ctx.rgb(0, 1, 0)
 		ctx.font_size = 20
 		ctx.move_to(0, -40).text("Test complete!")
 		ctx.font_size = 16
-		ctx.move_to(0, -10).text("{} passed".format(self._test_passed))
-		ctx.move_to(0, 15).text("{} skipped".format(self._test_skipped))
+		ctx.move_to(0, -10).text("{} passed".format(ts.passed))
+		ctx.move_to(0, 15).text("{} skipped".format(ts.skipped))
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 55).text("press any button")
 
 	def _draw_finished(self, ctx):
 		scores = self.session.server_scores
+		overall = self.session.overall_score
+
+		ctx.rgb(0.4, 0.8, 0.4)
+		ctx.font_size = 13
+		ctx.move_to(0, -75).text("Round over!")
+
 		ctx.rgb(0, 1, 0)
-		ctx.font_size = 20
-		ctx.move_to(0, -55).text("Round over!")
-		ctx.font_size = 16
-		ctx.move_to(0, -32).text("Team: {} pass  {} fail".format(
-			scores.get("passed", 0), scores.get("failed", 0),
-		))
+		if overall is not None:
+			ctx.font_size = 38
+			ctx.move_to(0, -42).text("{}".format(overall))
+			ctx.font_size = 14
+			ctx.move_to(0, -8).text("{} pass  {} fail".format(
+				scores.get("passed", 0), scores.get("failed", 0),
+			))
+		else:
+			ctx.font_size = 22
+			ctx.move_to(0, -40).text("{} pass".format(scores.get("passed", 0)))
+			ctx.move_to(0, -16).text("{} fail".format(scores.get("failed", 0)))
+
 		badge_scores = self.session.badge_scores
 		if badge_scores:
 			ctx.font_size = 11
 			ctx.rgb(0.5, 0.8, 0.5)
-			y = -10
+			y = 10
 			for colour in sorted(badge_scores):
 				s = badge_scores[colour]
 				marker = "*" if colour == self.session.badge_colour else " "
 				ctx.move_to(0, y).text("{}{}: {} / {}".format(
 					marker, colour[0].upper() + colour[1:], s.get("passed", 0), s.get("failed", 0),
 				))
-				y += 14
+				y += 13
+
 		ctx.font_size = 14
 		if self.session.dismissed_count > 0:
 			ctx.rgb(0, 1, 0)

@@ -11,7 +11,6 @@ class RoomClient:
         self.server_url = server_url.rstrip("/")
         self._requests = None
         self._import_error = None
-        self._session_token = None
         try:
             import requests  # type: ignore
             self._requests = requests
@@ -28,47 +27,43 @@ class RoomClient:
             return int(time.time() * 1000)
 
     def join_room(self, room_id, badge_id, capabilities):
-        self._session_token = None
         payload = {
             "badge_id": badge_id,
             "capabilities": capabilities,
             "timestamp_ms": self._timestamp_ms(),
         }
-        data, error = self._post("/api/rooms/{}/join".format(room_id), payload)
-        if data is not None:
-            self._session_token = data.get("session_token")
-        return data, error
+        return self._post("/api/rooms/{}/join".format(room_id), payload)
 
-    def poll(self, room_id, badge_id, capabilities, result=None):
+    def poll(self, room_id, badge_id, capabilities, result=None, session_token=None):
         payload = {
             "badge_id": badge_id,
             "capabilities": capabilities,
             "result": result,
-            "session_token": self._session_token,
+            "session_token": session_token,
             "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/poll".format(room_id), payload)
 
-    def leave_room(self, room_id, badge_id):
+    def leave_room(self, room_id, badge_id, session_token=None):
         payload = {
             "badge_id": badge_id,
-            "session_token": self._session_token,
+            "session_token": session_token,
             "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/leave".format(room_id), payload)
 
-    def start_round(self, room_id, badge_id):
+    def start_round(self, room_id, badge_id, session_token=None):
         payload = {
             "badge_id": badge_id,
-            "session_token": self._session_token,
+            "session_token": session_token,
             "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/start".format(room_id), payload)
 
-    def dismiss_score(self, room_id, badge_id):
+    def dismiss_score(self, room_id, badge_id, session_token=None):
         payload = {
             "badge_id": badge_id,
-            "session_token": self._session_token,
+            "session_token": session_token,
             "timestamp_ms": self._timestamp_ms(),
         }
         return self._post("/api/rooms/{}/dismiss".format(room_id), payload)

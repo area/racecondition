@@ -344,4 +344,5 @@ class Room:
             "is_ready": (badge_id in self._ready) if self._state == "waiting" else None,
             "dismissed_count": len(self._dismissed) if self._state == "finished" else None,
             "is_dismissed": (badge_id in self._dismissed) if self._state == "finished" else None,
+            "overall_score": self._calculate_score() if self._state == "finished" else None,
         }
