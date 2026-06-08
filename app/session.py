@@ -33,6 +33,7 @@ class GameSession:
         self.is_ready = False
         self.dismissed_count = 0
         self.is_dismissed = False
+        self.players = []
 
     @property
     def in_game(self):
@@ -85,6 +86,7 @@ class GameSession:
         self.badge_count = 0
         self.time_remaining_s = None
         self.badge_scores = {}
+        self.players = []
 
     def set_room_state(self, state):
         if state == self.room_state:
@@ -158,6 +160,8 @@ class GameSession:
             self.dismissed_count = data["dismissed_count"]
         if data.get("is_dismissed") is not None:
             self.is_dismissed = data["is_dismissed"]
+        if data.get("players") is not None:
+            self.players = data["players"]
         token = data.get("session_token")
         if token:
             self.session_token = token

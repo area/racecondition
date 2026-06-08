@@ -10,7 +10,7 @@ from leaderboard import FilesystemLeaderboard
 STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
 ASSIGNMENT_TIMEOUT_S = 15
-COLOURS = ["red", "green", "blue", "yellow", "purple", "orange"]
+COLOURS = ["red", "cyan", "blue", "yellow", "purple", "orange"]
 MAX_BADGES = len(COLOURS)
 
 
@@ -32,10 +32,11 @@ def _normalize_capabilities(capabilities):
 
 
 class Room:
-    def __init__(self, room_id, leaderboard=None):
+    def __init__(self, room_id, leaderboard=None, user_registry=None):
         self.room_id = room_id
         self._lock = Lock()
         self._leaderboard = leaderboard if leaderboard is not None else FilesystemLeaderboard()
+        self._user_registry = user_registry
         self._reset_state()
 
     # ------------------------------------------------------------------ public
@@ -310,6 +311,7 @@ class Room:
                 bid: list(b["capabilities"].keys())
                 for bid, b in self._badges.items()
             },
+            "badge_usernames": {bid: self._username(bid) for bid in self._badges},
             "module_counts": module_counts,
         }
         try:
@@ -329,9 +331,18 @@ class Room:
             return None
         return max(0.0, ROUND_DURATION_S - (self._now() - self._round_started_at))
 
+    def _username(self, badge_id):
+        if self._user_registry:
+            return self._user_registry.get(badge_id)
+        return None
+
     def _poll_response(self, badge_id):
         self._check_expiry()
         in_round = self._state == "in-round"
+        players = [
+            {"colour": self._colours.get(bid), "username": self._username(bid) or self._colours.get(bid)}
+            for bid in self._badges
+        ]
         return {
             "room_id": self.room_id,
             "room_state": self._state,
@@ -348,4 +359,5 @@ class Room:
             "dismissed_count": len(self._dismissed) if self._state == "finished" else None,
             "is_dismissed": (badge_id in self._dismissed) if self._state == "finished" else None,
             "overall_score": self._calculate_score() if self._state == "finished" else None,
+            "players": players,
         }

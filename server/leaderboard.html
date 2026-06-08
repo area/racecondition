@@ -142,10 +142,14 @@
             font-size: 13px;
         }
         .badge-id {
+            font-size: 13px;
+            font-weight: 600;
+            min-width: 40px;
+        }
+        .badge-id-mono {
             font-family: "IBM Plex Mono", monospace;
             font-size: 11px;
             opacity: 0.55;
-            min-width: 40px;
         }
         .module-tag {
             display: inline-block;
@@ -232,14 +236,28 @@
             return `${Math.floor(hrs / 24)}d ago`;
         }
 
+        function playerLabel(badgeId, entry) {
+            const name = entry.badge_usernames && entry.badge_usernames[badgeId];
+            if (name) return `<span class="badge-id">${esc(name)}</span>`;
+            const shortId = badgeId.length > 6 ? "…" + badgeId.slice(-4) : esc(badgeId);
+            return `<span class="badge-id badge-id-mono">${shortId}</span>`;
+        }
+
+        function teamHtml(entry) {
+            if (entry.badge_usernames) {
+                const names = Object.values(entry.badge_usernames).filter(Boolean);
+                if (names.length > 0) return names.map(esc).join(", ");
+            }
+            return `${entry.num_badges} badge${entry.num_badges !== 1 ? "s" : ""}`;
+        }
+
         function moduleTagsHtml(entry) {
             if (!entry.badges || Object.keys(entry.badges).length === 0) {
                 return `<span class="muted">${entry.num_badges} badge${entry.num_badges !== 1 ? 's' : ''}</span>`;
             }
             return Object.entries(entry.badges).map(([badgeId, modules]) => {
-                const shortId = badgeId.length > 6 ? "…" + badgeId.slice(-4) : esc(badgeId);
                 const tags = modules.map(m => `<span class="module-tag">${esc(m)}</span>`).join("");
-                return `<div class="badge-row"><span class="badge-id">${shortId}</span>${tags}</div>`;
+                return `<div class="badge-row">${playerLabel(badgeId, entry)}${tags}</div>`;
             }).join("");
         }
 
@@ -266,7 +284,7 @@
                 return `<tr${isNew && prevKeys.size > 0 ? ' class="new-entry"' : ''} data-key="${esc(key)}">
                     <td class="rank ${rankClass}">${rank}</td>
                     <td class="${scoreClass}">${entry.score.toFixed(2)}</td>
-                    <td class="badges-cell">${entry.num_badges} badge${entry.num_badges !== 1 ? 's' : ''}</td>
+                    <td class="badges-cell">${teamHtml(entry)}</td>
                     <td class="right pass">${entry.commands_passed}</td>
                     <td class="right fail">${entry.commands_failed}</td>
                     <td>${moduleTagsHtml(entry)}</td>

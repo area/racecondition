@@ -19,7 +19,7 @@ from .test_session import TestSession
 
 BADGE_COLOURS = {
     "red":    (40,  0,  0),
-    "green":  ( 0, 40,  0),
+    "cyan":   ( 0, 30, 30),
     "blue":   ( 0,  0, 40),
     "yellow": (30, 30,  0),
     "purple": (25,  0, 25),
@@ -54,6 +54,8 @@ class TildateamApp(app.App):
 		self._room_list = []
 		self._cancel_down_event = None
 		self._test_session = None
+		self._qr_active = False
+		self._qr_matrix = None
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -93,6 +95,10 @@ class TildateamApp(app.App):
 			self._test_session.on_button_down(event)
 			return
 
+		if self._qr_active:
+			self._exit_qr_screen()
+			return
+
 		if self._is_cancel(event):
 			if self.session.in_game and self.session.cancel_hold_start is None:
 				self.session.cancel_hold_start = time.ticks_ms()
@@ -123,7 +129,7 @@ class TildateamApp(app.App):
 			self._cancel_down_event = None
 
 	def _main_menu_items(self):
-		return ["Join Room", "Create Room", "Test modules", "Quit"]
+		return ["Join Room", "Create Room", "Set name", "Test modules", "Quit"]
 
 	def _ensure_menu(self):
 		if not self.menu:
@@ -140,6 +146,8 @@ class TildateamApp(app.App):
 			self._show_join_menu()
 		elif item == "Create Room":
 			self._do_create_room()
+		elif item == "Set name":
+			self._show_qr_screen()
 		elif item == "Test modules":
 			self._start_testing()
 		elif item == "Quit":
@@ -278,6 +286,29 @@ class TildateamApp(app.App):
 			return
 		self._test_session = ts
 
+	def _show_qr_screen(self):
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
+		self._qr_active = True
+
+	def _exit_qr_screen(self):
+		if not self._qr_active:
+			return
+		self._qr_active = False
+		self._ensure_menu()
+
+	def _get_qr_matrix(self):
+		if self._qr_matrix is None:
+			try:
+				from .uQR import QRCode
+				qr = QRCode()
+				qr.add_data("{}/register/{}".format(self.room_client.server_url, self.badge_id))
+				self._qr_matrix = qr.get_matrix()
+			except Exception:
+				self._qr_matrix = False
+		return self._qr_matrix if self._qr_matrix else None
+
 	def _capabilities(self):
 		return self.module_registry.get_capabilities()
 
@@ -357,7 +388,7 @@ class TildateamApp(app.App):
 					self.session.pending_result = self.session.build_result(status)
 
 			self._poll_server(force=False)
-		else:
+		elif not self._qr_active:
 			self._ensure_menu()
 			if self.menu:
 				self.menu.update(delta)
@@ -382,6 +413,8 @@ class TildateamApp(app.App):
 			self._draw_in_round(ctx)
 		elif self.session.room_state == "finished":
 			self._draw_finished(ctx)
+		elif self._qr_active:
+			self._draw_qr_screen(ctx)
 		elif self.menu:
 			self.menu.draw(ctx)
 
@@ -399,26 +432,42 @@ class TildateamApp(app.App):
 
 	def _draw_waiting(self, ctx):
 		ctx.rgb(0, 1, 0)
-		ctx.font_size = 20
-		ctx.move_to(0, -40).text("Room {}".format(self.session.room_id))
-		ctx.font_size = 14
-		ctx.move_to(0, -10).text("{} badge{} connected".format(
-			self.session.badge_count,
-			"s" if self.session.badge_count != 1 else "",
-		))
+		ctx.font_size = 16
+		ctx.move_to(0, -68).text("Room {}".format(self.session.room_id))
+
+		players = self.session.players
+		if players:
+			y = -52
+			for player in players:
+				colour = player.get("colour", "")
+				name = player.get("username") or colour
+				rgb = BADGE_COLOURS.get(colour, (20, 20, 20))
+				ctx.rgb(rgb[0] / 40, rgb[1] / 40, rgb[2] / 40)
+				ctx.font_size = 11
+				ctx.move_to(0, y).text(name)
+				y += 12
+		else:
+			ctx.rgb(0, 1, 0)
+			ctx.font_size = 14
+			ctx.move_to(0, -40).text("{} badge{} connected".format(
+				self.session.badge_count,
+				"s" if self.session.badge_count != 1 else "",
+			))
+
+		ctx.rgb(0, 1, 0)
 		ctx.font_size = 16
 		if self.session.ready_count > 0:
-			ctx.move_to(0, 20).text("{} / {} ready".format(self.session.ready_count, self.session.badge_count))
+			ctx.move_to(0, 30).text("{} / {} ready".format(self.session.ready_count, self.session.badge_count))
 			ctx.font_size = 12
 			if self.session.is_ready:
 				ctx.rgb(0, 0.6, 0)
-				ctx.move_to(0, 40).text("you're ready!")
+				ctx.move_to(0, 48).text("you're ready!")
 			else:
 				ctx.rgb(0.8, 0.8, 0)
-				ctx.move_to(0, 40).text("press any button")
+				ctx.move_to(0, 48).text("press any button")
 		else:
-			ctx.move_to(0, 20).text("Press any button")
-			ctx.move_to(0, 40).text("to start round")
+			ctx.move_to(0, 30).text("Press any button")
+			ctx.move_to(0, 48).text("to start round")
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 68).text("hold cancel to leave")
@@ -502,14 +551,16 @@ class TildateamApp(app.App):
 
 		badge_scores = self.session.badge_scores
 		if badge_scores:
+			colour_names = {p["colour"]: p.get("username") or p["colour"] for p in self.session.players}
 			ctx.font_size = 11
 			ctx.rgb(0.5, 0.8, 0.5)
 			y = 10
 			for colour in sorted(badge_scores):
 				s = badge_scores[colour]
 				marker = "*" if colour == self.session.badge_colour else " "
+				name = colour_names.get(colour, colour)
 				ctx.move_to(0, y).text("{}{}: {} / {}".format(
-					marker, colour[0].upper() + colour[1:], s.get("passed", 0), s.get("failed", 0),
+					marker, name, s.get("passed", 0), s.get("failed", 0),
 				))
 				y += 13
 
@@ -528,3 +579,32 @@ class TildateamApp(app.App):
 			ctx.font_size = 10
 			ctx.rgb(0.4, 0.4, 0.4)
 			ctx.move_to(0, 74).text("press any button to continue")
+
+	def _draw_qr_screen(self, ctx):
+		matrix = self._get_qr_matrix()
+		if matrix:
+			qr_size = len(matrix)
+			pixel_size = max(3, int(160 / qr_size))
+			total = pixel_size * qr_size
+			ox = -(total // 2)
+			oy = -(total // 2) - 10
+			ctx.rgb(1, 1, 1).rectangle(ox - 4, oy - 4, total + 8, total + 8).fill()
+			for row in range(qr_size):
+				for col in range(qr_size):
+					if matrix[row][col]:
+						ctx.rgb(0, 0, 0).rectangle(
+							ox + col * pixel_size,
+							oy + row * pixel_size,
+							pixel_size, pixel_size,
+						).fill()
+		else:
+			ctx.rgb(0, 1, 0)
+			ctx.font_size = 11
+			ctx.move_to(0, -20).text("Scan to set name")
+			ctx.font_size = 9
+			url = self.room_client.server_url
+			ctx.move_to(0, 0).text(url + "/register/")
+			ctx.move_to(0, 14).text(self.badge_id)
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.font_size = 9
+		ctx.move_to(0, 80).text("any key to go back")
