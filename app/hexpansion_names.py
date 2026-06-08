@@ -9,6 +9,8 @@ VID_PID_TO_FRIENDLY_NAME = {
     (0x4291, 0x1717): 'InfraRed',
     (0x4291, 0x1830): 'UK Map',
     (0x4291, 0x5E6A): 'MegaDrive',
+    (0xBAD3, 0x31F1): 'EMFWiFi',
+    (0xBAD3, 0x4EEB): 'keepdeck',
     (0xCAFE, 0x1295): 'GPS',
     (0xCAFE, 0x5E6A): 'MegaDrive',
     (0xCAFE, 0xCAFF): 'Caffeine!',
