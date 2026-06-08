@@ -44,10 +44,8 @@ class RoomServerTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         room_server.rooms.clear()
-        room_server._room_counter = 0
         for room_id in range(1, 6):
             room_server.rooms[room_id] = Room(room_id)
-        room_server._room_counter = 5
 
         cls.server = ThreadingHTTPServer((TEST_HOST, TEST_PORT), room_server.RoomRequestHandler)
         cls.server_thread = Thread(target=cls.server.serve_forever, daemon=True)
@@ -72,6 +70,19 @@ class RoomServerTestCase(unittest.TestCase):
             return content, resp.code
 
     # ------------------------------------------------------------------ join
+
+    def test_join_room_full_returns_error(self):
+        from room import MAX_BADGES
+        room_server.rooms[99] = Room(99)
+        try:
+            for i in range(MAX_BADGES):
+                data, error = self.client.join_room(99, "badge-full-{}".format(i), GPS_CAPS)
+                self.assertIsNone(error)
+            data, error = self.client.join_room(99, "badge-overflow", GPS_CAPS)
+            self.assertIsNone(data)
+            self.assertIsNotNone(error)
+        finally:
+            room_server.rooms.pop(99, None)
 
     def test_join_returns_expected_fields(self):
         data, error = self.client.join_room(1, "badge-join", GPS_CAPS)
@@ -301,6 +312,15 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertIn("rooms", response)
         self.assertIn("total_badges", response)
         self.assertIsInstance(response["rooms"], list)
+
+    def test_create_room_reuses_deleted_id(self):
+        data1, _ = self.client.create_room()
+        room_id = data1["room_id"]
+        self.client.join_room(room_id, "badge-reuse", GPS_CAPS)
+        self.client.leave_room(room_id, "badge-reuse")
+        self.assertNotIn(room_id, room_server.rooms)
+        data2, _ = self.client.create_room()
+        self.assertEqual(data2["room_id"], room_id)
 
     def test_create_room(self):
         initial_count = len(room_server.rooms)

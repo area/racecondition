@@ -18,13 +18,14 @@ def _make_module(name, commands):
     m = MagicMock()
     m.FRIENDLY_NAME = name
     m.COMMAND_OPTIONS = commands
+    m.get_capabilities.return_value = {"module": name, "commands": commands}
     return m
 
 
 class TestTestingModeApp(unittest.TestCase):
     def test_menu_contains_test_modules(self):
         a = _make_app()
-        self.assertIn("Test modules", a._menu_items())
+        self.assertIn("Test modules", a._main_menu_items())
 
     def test_no_modules_shows_notification_no_test_session(self):
         a = _make_app(modules=[])

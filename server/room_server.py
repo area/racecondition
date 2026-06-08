@@ -29,16 +29,18 @@ LEADERBOARD_HTML = _load_html(LEADERBOARD_HTML_PATH, "Leaderboard page")
 leaderboard = FilesystemLeaderboard()
 rooms = {}
 _rooms_lock = threading.Lock()
-_room_counter = 0
 
 
 def _new_room():
-    global _room_counter
     with _rooms_lock:
-        _room_counter += 1
-        room_id = _room_counter
+        room_id = next(i for i in range(1, len(rooms) + 2) if i not in rooms)
         rooms[room_id] = Room(room_id, leaderboard=leaderboard)
     return rooms[room_id]
+
+
+def _delete_room(room_id):
+    with _rooms_lock:
+        rooms.pop(room_id, None)
 
 
 class RoomRequestHandler(BaseHTTPRequestHandler):
@@ -99,10 +101,8 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
                         "badge_count": snap["badge_count"],
                         "room_state": snap["room_state"],
                     })
-            if empty_ids:
-                with _rooms_lock:
-                    for rid in empty_ids:
-                        rooms.pop(rid, None)
+            for rid in empty_ids:
+                _delete_room(rid)
             self._send_json(200, {"rooms": result})
             return
 
@@ -149,6 +149,9 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
 
         if action == "join":
             response = room.join(badge_id, payload.get("capabilities"))
+            if "error" in response:
+                self._send_json(400, response)
+                return
         elif action == "poll":
             response = room.poll(badge_id, payload.get("capabilities"),
                                  result=payload.get("result"),
@@ -156,8 +159,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
         elif action == "leave":
             response = room.leave(badge_id)
             if response.get("badge_count", 1) == 0:
-                with _rooms_lock:
-                    rooms.pop(room_id, None)
+                _delete_room(room_id)
         elif action == "start":
             response = room.start_round(badge_id)
         else:  # dismiss

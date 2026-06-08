@@ -122,25 +122,22 @@ class TildateamApp(app.App):
 			self.session.cancel_hold_start = None
 			self._cancel_down_event = None
 
-	def _menu_items(self):
-		items = []
-		for room in self._room_list:
-			rid = room["room_id"]
-			count = room.get("badge_count", 0)
-			state = room.get("room_state", "waiting")
-			suffix = " (in-round)" if state == "in-round" else ""
-			items.append("Room {} - {} badge{}{}".format(
-				rid, count, "s" if count != 1 else "", suffix,
-			))
-		items.append("Create Room")
-		items.append("Test modules")
-		items.append("Quit")
-		return items
+	def _main_menu_items(self):
+		return ["Join Room", "Create Room", "Test modules", "Quit"]
 
-	def _menu_select(self, item, idx):
-		n_rooms = len(self._room_list)
-		if idx < n_rooms:
-			self._start_room(self._room_list[idx]["room_id"])
+	def _ensure_menu(self):
+		if not self.menu:
+			self._room_list = []
+			self.menu = Menu(
+				self,
+				self._main_menu_items(),
+				select_handler=self._main_menu_select,
+				back_handler=self._menu_back,
+			)
+
+	def _main_menu_select(self, item, idx):
+		if item == "Join Room":
+			self._show_join_menu()
 		elif item == "Create Room":
 			self._do_create_room()
 		elif item == "Test modules":
@@ -151,18 +148,44 @@ class TildateamApp(app.App):
 			self.button_states.clear()
 			self.minimise()
 
-	def _ensure_menu(self):
-		if not self.menu:
-			if self.room_client.available():
-				data, _ = self.room_client.list_rooms()
-				if data:
-					self._room_list = data.get("rooms", [])
-			self.menu = Menu(
-				self,
-				self._menu_items(),
-				select_handler=self._menu_select,
-				back_handler=self._menu_back,
-			)
+	def _show_join_menu(self):
+		if self.room_client.available():
+			data, _ = self.room_client.list_rooms()
+			if data:
+				self._room_list = data.get("rooms", [])
+		if not self._room_list:
+			self.notification = Notification("No rooms open")
+			return
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
+		items = []
+		for room in self._room_list:
+			rid = room["room_id"]
+			count = room.get("badge_count", 0)
+			state = room.get("room_state", "waiting")
+			suffix = " (in-round)" if state == "in-round" else ""
+			items.append("Room {} - {}/{}{}".format(
+				rid, count, len(BADGE_COLOURS), suffix,
+			))
+		items.append("Back")
+		self.menu = Menu(
+			self,
+			items,
+			select_handler=self._join_menu_select,
+			back_handler=self._back_to_main,
+		)
+
+	def _join_menu_select(self, item, idx):
+		if idx < len(self._room_list):
+			self._start_room(self._room_list[idx]["room_id"])
+		else:
+			self._back_to_main()
+
+	def _back_to_main(self):
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
 
 	def _do_create_room(self):
 		if not self.room_client.available():

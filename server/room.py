@@ -11,6 +11,7 @@ STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
 ASSIGNMENT_TIMEOUT_S = 15
 COLOURS = ["red", "green", "blue", "yellow", "purple", "orange"]
+MAX_BADGES = len(COLOURS)
 
 
 def _normalize_capabilities(capabilities):
@@ -42,6 +43,8 @@ class Room:
     def join(self, badge_id, capabilities):
         with self._lock:
             self._prune_stale()
+            if badge_id not in self._badges and len(self._badges) >= MAX_BADGES:
+                return {"room_id": self.room_id, "error": "Room is full"}
             self._set_badge(badge_id, _normalize_capabilities(capabilities))
             return self._poll_response(badge_id)
 
