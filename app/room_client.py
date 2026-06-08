@@ -68,6 +68,32 @@ class RoomClient:
         }
         return self._post("/api/rooms/{}/dismiss".format(room_id), payload)
 
+    def list_rooms(self):
+        return self._get("/api/rooms")
+
+    def create_room(self):
+        return self._post("/api/rooms/create", {})
+
+    def _get(self, path):
+        if not self._requests:
+            return None, "Networking unavailable: {}".format(self._import_error or "requests not found")
+        url = "{}{}".format(self.server_url, path)
+        response = None
+        try:
+            response = self._requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+            data = response.json()
+            if response.status_code >= 400:
+                return None, data.get("error", "HTTP {}".format(response.status_code))
+            return data, None
+        except Exception as exc:
+            return None, str(exc)
+        finally:
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:
+                    pass
+
     def _post(self, path, payload):
         if not self._requests:
             return None, "Networking unavailable: {}".format(self._import_error or "requests not found")

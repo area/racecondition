@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import re
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -9,7 +10,6 @@ from leaderboard import FilesystemLeaderboard
 
 HOST = "0.0.0.0"
 PORT = 8000
-ROOM_IDS = tuple(range(1, 6))
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
@@ -27,7 +27,18 @@ ADMIN_HTML = _load_html(ADMIN_HTML_PATH, "Admin page")
 LEADERBOARD_HTML = _load_html(LEADERBOARD_HTML_PATH, "Leaderboard page")
 
 leaderboard = FilesystemLeaderboard()
-rooms = {room_id: Room(room_id, leaderboard=leaderboard) for room_id in ROOM_IDS}
+rooms = {}
+_rooms_lock = threading.Lock()
+_room_counter = 0
+
+
+def _new_room():
+    global _room_counter
+    with _rooms_lock:
+        _room_counter += 1
+        room_id = _room_counter
+        rooms[room_id] = Room(room_id, leaderboard=leaderboard)
+    return rooms[room_id]
 
 
 class RoomRequestHandler(BaseHTTPRequestHandler):
@@ -64,11 +75,35 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/admin/status":
-            snapshots = [rooms[room_id].admin_snapshot() for room_id in ROOM_IDS]
+            with _rooms_lock:
+                room_list = list(rooms.values())
+            snapshots = [r.admin_snapshot() for r in room_list]
             self._send_json(200, {
                 "rooms": snapshots,
                 "total_badges": sum(s["badge_count"] for s in snapshots),
             })
+            return
+
+        if self.path == "/api/rooms":
+            with _rooms_lock:
+                room_items = list(rooms.items())
+            result = []
+            empty_ids = []
+            for rid, r in room_items:
+                snap = r.admin_snapshot()
+                if snap["badge_count"] == 0:
+                    empty_ids.append(rid)
+                else:
+                    result.append({
+                        "room_id": snap["room_id"],
+                        "badge_count": snap["badge_count"],
+                        "room_state": snap["room_state"],
+                    })
+            if empty_ids:
+                with _rooms_lock:
+                    for rid in empty_ids:
+                        rooms.pop(rid, None)
+            self._send_json(200, {"rooms": result})
             return
 
         if self.path == "/api/leaderboard":
@@ -78,6 +113,11 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if self.path == "/api/rooms/create":
+            room = _new_room()
+            self._send_json(200, {"room_id": room.room_id})
+            return
+
         match = re.match(r"^/api/rooms/(\d+)/(join|poll|leave|start|dismiss|hurry)$", self.path)
         if not match:
             self._send_json(404, {"error": "Not found"})
@@ -85,7 +125,10 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
 
         room_id = int(match.group(1))
         action = match.group(2)
-        if room_id not in ROOM_IDS:
+
+        with _rooms_lock:
+            room = rooms.get(room_id)
+        if room is None:
             self._send_json(404, {"error": "Unknown room"})
             return
 
@@ -94,8 +137,6 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_json(400, {"error": "Invalid JSON: {}".format(exc)})
             return
-
-        room = rooms[room_id]
 
         if action == "hurry":
             self._send_json(200, room.set_timer(5))
@@ -114,6 +155,9 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
                                  session_token=payload.get("session_token"))
         elif action == "leave":
             response = room.leave(badge_id)
+            if response.get("badge_count", 1) == 0:
+                with _rooms_lock:
+                    rooms.pop(room_id, None)
         elif action == "start":
             response = room.start_round(badge_id)
         else:  # dismiss

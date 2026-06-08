@@ -43,8 +43,11 @@ class RoomServerTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        for room_id in room_server.ROOM_IDS:
+        room_server.rooms.clear()
+        room_server._room_counter = 0
+        for room_id in range(1, 6):
             room_server.rooms[room_id] = Room(room_id)
+        room_server._room_counter = 5
 
         cls.server = ThreadingHTTPServer((TEST_HOST, TEST_PORT), room_server.RoomRequestHandler)
         cls.server_thread = Thread(target=cls.server.serve_forever, daemon=True)
@@ -157,7 +160,8 @@ class RoomServerTestCase(unittest.TestCase):
         room_server.rooms[2] = Room(2)
         badge_id = "badge-pass"
         import json, urllib.request
-        self.client.join_room(2, badge_id, GPS_CAPS)
+        join_data, _ = self.client.join_room(2, badge_id, GPS_CAPS)
+        session_token = join_data["session_token"]
         url = BASE_URL + "/api/rooms/2/start"
         req = urllib.request.Request(
             url,
@@ -166,9 +170,9 @@ class RoomServerTestCase(unittest.TestCase):
             method="POST",
         )
         urllib.request.urlopen(req).close()
-        join_data, _ = self.client.poll(2, badge_id, GPS_CAPS)
-        score_before = join_data["scores"]["passed"]
-        assignment = join_data.get("assignment")
+        poll_data, _ = self.client.poll(2, badge_id, GPS_CAPS, session_token=session_token)
+        score_before = poll_data["scores"]["passed"]
+        assignment = poll_data.get("assignment")
         if assignment is None:
             self.skipTest("No assignment issued — cannot test result submission")
 
@@ -178,7 +182,7 @@ class RoomServerTestCase(unittest.TestCase):
             "module": assignment["module"],
             "command": assignment["command"],
         }
-        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result)
+        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result, session_token=session_token)
         self.assertIsNone(error)
         self.assertEqual(data["scores"]["passed"], score_before + 1)
 
@@ -186,7 +190,8 @@ class RoomServerTestCase(unittest.TestCase):
         room_server.rooms[2] = Room(2)
         badge_id = "badge-fail"
         import json, urllib.request
-        self.client.join_room(2, badge_id, GPS_CAPS)
+        join_data, _ = self.client.join_room(2, badge_id, GPS_CAPS)
+        session_token = join_data["session_token"]
         url = BASE_URL + "/api/rooms/2/start"
         req = urllib.request.Request(
             url,
@@ -195,9 +200,9 @@ class RoomServerTestCase(unittest.TestCase):
             method="POST",
         )
         urllib.request.urlopen(req).close()
-        join_data, _ = self.client.poll(2, badge_id, GPS_CAPS)
-        score_before = join_data["scores"]["failed"]
-        assignment = join_data.get("assignment")
+        poll_data, _ = self.client.poll(2, badge_id, GPS_CAPS, session_token=session_token)
+        score_before = poll_data["scores"]["failed"]
+        assignment = poll_data.get("assignment")
         if assignment is None:
             self.skipTest("No assignment issued — cannot test result submission")
 
@@ -207,7 +212,7 @@ class RoomServerTestCase(unittest.TestCase):
             "module": assignment["module"],
             "command": assignment["command"],
         }
-        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result)
+        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result, session_token=session_token)
         self.assertIsNone(error)
         self.assertEqual(data["scores"]["failed"], score_before + 1)
 
@@ -245,15 +250,15 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(data["status"], "left")
 
-    def test_leave_last_badge_resets_room(self):
+    def test_room_deleted_when_last_badge_leaves(self):
         room_server.rooms[5] = Room(5)
         badge_id = "badge-reset"
         self.client.join_room(5, badge_id, GPS_CAPS)
         self.client.leave_room(5, badge_id)
+        self.assertNotIn(5, room_server.rooms)
         data, error = self.client.join_room(5, badge_id, GPS_CAPS)
-        self.assertIsNone(error)
-        self.assertEqual(data["scores"]["passed"], 0)
-        self.assertEqual(data["scores"]["failed"], 0)
+        self.assertIsNone(data)
+        self.assertIsNotNone(error)
 
     # ------------------------------------------------------------------ errors
 
@@ -295,7 +300,31 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("rooms", response)
         self.assertIn("total_badges", response)
-        self.assertEqual(len(response["rooms"]), len(room_server.ROOM_IDS))
+        self.assertIsInstance(response["rooms"], list)
+
+    def test_create_room(self):
+        initial_count = len(room_server.rooms)
+        data, error = self.client.create_room()
+        self.assertIsNone(error)
+        self.assertIn("room_id", data)
+        self.assertEqual(len(room_server.rooms), initial_count + 1)
+        room_id = data["room_id"]
+        join_data, join_error = self.client.join_room(room_id, "badge-create-test", GPS_CAPS)
+        self.assertIsNone(join_error)
+        self.assertEqual(join_data["room_id"], room_id)
+
+    def test_list_rooms_returns_active_rooms(self):
+        room_server.rooms[4] = Room(4)
+        self.client.join_room(4, "badge-list-test", GPS_CAPS)
+        response, status = self._get_json("/api/rooms")
+        self.assertEqual(status, 200)
+        self.assertIn("rooms", response)
+        room_ids = [r["room_id"] for r in response["rooms"]]
+        self.assertIn(4, room_ids)
+        for r in response["rooms"]:
+            self.assertIn("badge_count", r)
+            self.assertIn("room_state", r)
+            self.assertGreater(r["badge_count"], 0)
 
     def test_admin_page_returns_html(self):
         response, status = self._get_json("/admin")

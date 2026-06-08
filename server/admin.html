@@ -44,7 +44,26 @@
             display: grid;
             gap: 16px;
             padding: 16px 24px 28px;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(280px, 360px));
+        }
+        .no-rooms {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 64px 24px;
+            opacity: 0.55;
+        }
+        .no-rooms .no-rooms-icon {
+            font-size: 48px;
+            line-height: 1;
+            margin-bottom: 12px;
+        }
+        .no-rooms p {
+            margin: 4px 0;
+            font-size: 15px;
+        }
+        .no-rooms .hint {
+            font-size: 13px;
+            margin-top: 8px;
         }
         .room {
             background: var(--panel);
@@ -139,12 +158,19 @@
         <h1>SpaceTeam Admin Console</h1>
         <div class="sub">Live room state, badges, assignments, and scores</div>
     </header>
-    <main id="rooms"></main>
+    <main id="rooms">
+        <div class="no-rooms" id="no-rooms">
+            <div class="no-rooms-icon">🚀</div>
+            <p><strong>No rooms open</strong></p>
+            <p class="hint">Create a room from a badge to get started</p>
+        </div>
+    </main>
     <div class="footer" id="updated">Waiting for data...</div>
 
     <script>
         const roomsEl = document.getElementById("rooms");
         const updatedEl = document.getElementById("updated");
+        const noRoomsEl = document.getElementById("no-rooms");
         const roomNodes = new Map();
 
         function esc(v) {
@@ -239,6 +265,8 @@
                     roomNodes.delete(key);
                 }
             }
+
+            noRoomsEl.style.display = roomNodes.size === 0 ? "" : "none";
         }
 
         async function refresh() {

@@ -27,7 +27,6 @@ BADGE_COLOURS = {
 }
 
 CANCEL_HOLD_MS = 4000
-ROOM_COUNT = 5
 SERVER_POLL_INTERVAL_MS = 750
 
 
@@ -52,6 +51,7 @@ class TildateamApp(app.App):
 		self.notification = None
 		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
+		self._room_list = []
 		self._cancel_down_event = None
 		self._test_session = None
 		self._scan()
@@ -124,16 +124,25 @@ class TildateamApp(app.App):
 
 	def _menu_items(self):
 		items = []
-		for room in range(1, ROOM_COUNT + 1):
-			items.append("Join Room {}".format(room))
+		for room in self._room_list:
+			rid = room["room_id"]
+			count = room.get("badge_count", 0)
+			state = room.get("room_state", "waiting")
+			suffix = " (in-round)" if state == "in-round" else ""
+			items.append("Room {} - {} badge{}{}".format(
+				rid, count, "s" if count != 1 else "", suffix,
+			))
+		items.append("Create Room")
 		items.append("Test modules")
 		items.append("Quit")
 		return items
 
 	def _menu_select(self, item, idx):
-		if item.startswith("Join Room "):
-			room = int(item.split(" ")[-1])
-			self._start_room(room)
+		n_rooms = len(self._room_list)
+		if idx < n_rooms:
+			self._start_room(self._room_list[idx]["room_id"])
+		elif item == "Create Room":
+			self._do_create_room()
 		elif item == "Test modules":
 			self._start_testing()
 		elif item == "Quit":
@@ -144,12 +153,28 @@ class TildateamApp(app.App):
 
 	def _ensure_menu(self):
 		if not self.menu:
+			if self.room_client.available():
+				data, _ = self.room_client.list_rooms()
+				if data:
+					self._room_list = data.get("rooms", [])
 			self.menu = Menu(
 				self,
 				self._menu_items(),
 				select_handler=self._menu_select,
 				back_handler=self._menu_back,
 			)
+
+	def _do_create_room(self):
+		if not self.room_client.available():
+			self.notification = Notification("No network")
+			self._ensure_menu()
+			return
+		data, error = self.room_client.create_room()
+		if error:
+			self.notification = Notification("Create failed: {}".format(error))
+			self._ensure_menu()
+			return
+		self._start_room(data["room_id"])
 
 	def _menu_back(self):
 		pass
