@@ -30,9 +30,6 @@ class MegaDriveModule(HexpansionModule):
         if button_name == self.current_command:
             self.last_status = CommandStatus.PASSED
 
-    def check_command(self) -> str:
-        return self.last_status
-
     def _get_button_name(self, event):
         button = getattr(event, "button", None)
         if button is None:

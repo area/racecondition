@@ -46,4 +46,4 @@ class HexpansionModule:
         pass
 
     def check_command(self) -> str:
-        return CommandStatus.WAITING
+        return self.last_status
