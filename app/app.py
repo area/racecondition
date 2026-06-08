@@ -487,10 +487,12 @@ class TildateamApp(app.App):
 
 		ctx.rgb(0, 1, 0)
 		if overall is not None:
+			ctx.font_size = 11
+			ctx.move_to(0, -52).text("Your team's score")
 			ctx.font_size = 38
-			ctx.move_to(0, -42).text("{}".format(overall))
+			ctx.move_to(0, -26).text("{}".format(overall))
 			ctx.font_size = 14
-			ctx.move_to(0, -8).text("{} pass  {} fail".format(
+			ctx.move_to(0, -3).text("{} pass  {} fail".format(
 				scores.get("passed", 0), scores.get("failed", 0),
 			))
 		else:
