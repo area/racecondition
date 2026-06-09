@@ -116,7 +116,10 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/leaderboard":
-            self._send_json(200, {"leaderboard": leaderboard.entries(), "usernames": user_registry.all()})
+            entries = leaderboard.entries()
+            badge_ids = {bid for e in entries for bid in e.get("badges", {}).keys()}
+            usernames = {bid: user_registry.get(bid) for bid in badge_ids}
+            self._send_json(200, {"leaderboard": entries, "usernames": usernames})
             return
 
         if re.match(r"^/register/[a-zA-Z0-9_-]+$", self.path):
@@ -137,11 +140,14 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(secret_id, str) or not secret_id:
                 self._send_json(400, {"error": "secret_id is required"})
                 return
-            if not isinstance(username, str) or not username.strip():
-                self._send_json(400, {"error": "username is required"})
+            if not isinstance(username, str):
+                self._send_json(400, {"error": "username must be a string"})
                 return
             badge_id = _public_id_from_secret(secret_id)
-            user_registry.set(badge_id, username)
+            if username.strip():
+                user_registry.set(badge_id, username)
+            else:
+                user_registry.delete(badge_id)
             self._send_json(200, {"ok": True, "username": user_registry.get(badge_id)})
             return
 

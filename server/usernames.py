@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from names import generate_name
+
 USERNAMES_PATH = Path(__file__).resolve().parent / "usernames.json"
 
 
@@ -17,7 +19,12 @@ class UserRegistry:
         self._path.write_text(json.dumps(self._data, indent=2))
 
     def get(self, badge_id):
-        return self._data.get(badge_id)
+        return self._data.get(badge_id) or generate_name(badge_id)
+
+    def delete(self, badge_id):
+        if badge_id in self._data:
+            del self._data[badge_id]
+            self._path.write_text(json.dumps(self._data, indent=2))
 
     def all(self):
         return dict(self._data)
