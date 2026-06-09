@@ -236,28 +236,28 @@
             return `${Math.floor(hrs / 24)}d ago`;
         }
 
-        function playerLabel(badgeId, entry) {
-            const name = entry.badge_usernames && entry.badge_usernames[badgeId];
+        function playerLabel(badgeId, usernames) {
+            const name = usernames && usernames[badgeId];
             if (name) return `<span class="badge-id">${esc(name)}</span>`;
             const shortId = badgeId.length > 6 ? "…" + badgeId.slice(-4) : esc(badgeId);
             return `<span class="badge-id badge-id-mono">${shortId}</span>`;
         }
 
-        function teamHtml(entry) {
-            if (entry.badge_usernames) {
-                const names = Object.values(entry.badge_usernames).filter(Boolean);
+        function teamHtml(entry, usernames) {
+            if (entry.badges && usernames) {
+                const names = Object.keys(entry.badges).map(id => usernames[id]).filter(Boolean);
                 if (names.length > 0) return names.map(esc).join(", ");
             }
             return `${entry.num_badges} badge${entry.num_badges !== 1 ? "s" : ""}`;
         }
 
-        function moduleTagsHtml(entry) {
+        function moduleTagsHtml(entry, usernames) {
             if (!entry.badges || Object.keys(entry.badges).length === 0) {
                 return `<span class="muted">${entry.num_badges} badge${entry.num_badges !== 1 ? 's' : ''}</span>`;
             }
             return Object.entries(entry.badges).map(([badgeId, modules]) => {
                 const tags = modules.map(m => `<span class="module-tag">${esc(m)}</span>`).join("");
-                return `<div class="badge-row">${playerLabel(badgeId, entry)}${tags}</div>`;
+                return `<div class="badge-row">${playerLabel(badgeId, usernames)}${tags}</div>`;
             }).join("");
         }
 
@@ -265,7 +265,7 @@
             return entry.timestamp + "|" + entry.score;
         }
 
-        function render(entries) {
+        function render(entries, usernames) {
             const top = entries.filter(e => e.score > 0).slice(0, 15);
 
             if (top.length === 0) {
@@ -284,10 +284,10 @@
                 return `<tr${isNew && prevKeys.size > 0 ? ' class="new-entry"' : ''} data-key="${esc(key)}">
                     <td class="rank ${rankClass}">${rank}</td>
                     <td class="${scoreClass}">${entry.score.toFixed(2)}</td>
-                    <td class="badges-cell">${teamHtml(entry)}</td>
+                    <td class="badges-cell">${teamHtml(entry, usernames)}</td>
                     <td class="right pass">${entry.commands_passed}</td>
                     <td class="right fail">${entry.commands_failed}</td>
-                    <td>${moduleTagsHtml(entry)}</td>
+                    <td>${moduleTagsHtml(entry, usernames)}</td>
                     <td class="timestamp">${relativeTime(entry.timestamp)}</td>
                 </tr>`;
             });
@@ -300,7 +300,7 @@
             try {
                 const res = await fetch("/api/leaderboard");
                 const data = await res.json();
-                render(data.leaderboard || []);
+                render(data.leaderboard || [], data.usernames || {});
                 updatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
             } catch (err) {
                 updatedEl.textContent = `Fetch failed: ${err}`;

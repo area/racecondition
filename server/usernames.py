@@ -18,3 +18,6 @@ class UserRegistry:
 
     def get(self, badge_id):
         return self._data.get(badge_id)
+
+    def all(self):
+        return dict(self._data)

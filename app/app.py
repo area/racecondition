@@ -30,20 +30,33 @@ CANCEL_HOLD_MS = 4000
 SERVER_POLL_INTERVAL_MS = 750
 
 
-def _build_badge_id():
+def _build_secret_id():
+	try:
+		from tildagon import HMAC
+		return HMAC.digest(HMAC.HMAC_KEY1, b"Tildateam").hex()
+	except Exception:
+		pass
 	try:
 		import machine
 		import ubinascii
-
 		return ubinascii.hexlify(machine.unique_id()).decode("utf-8")
 	except Exception:
 		return "badge-{}".format(time.ticks_ms())
 
 
+def _derive_public_id(secret_id):
+	import uhashlib
+	import ubinascii
+	h = uhashlib.sha256()
+	h.update(secret_id.encode())
+	return ubinascii.hexlify(h.digest()[:8]).decode()
+
+
 class TildateamApp(app.App):
 	def __init__(self, room_client=None):
 		self.button_states = Buttons(self)
-		self.badge_id = _build_badge_id()
+		self._secret_id = _build_secret_id()
+		self.badge_id = _derive_public_id(self._secret_id)
 		self.session = GameSession()
 		self.connected_modules = []
 		self.module_registry = ModuleRegistry()
@@ -303,7 +316,7 @@ class TildateamApp(app.App):
 			try:
 				from .uQR import QRCode
 				qr = QRCode()
-				qr.add_data("{}/register/{}".format(self.room_client.server_url, self.badge_id))
+				qr.add_data("{}/register/{}".format(self.room_client.server_url, self._secret_id))
 				self._qr_matrix = qr.get_matrix()
 			except Exception:
 				self._qr_matrix = False
@@ -604,7 +617,7 @@ class TildateamApp(app.App):
 			ctx.font_size = 9
 			url = self.room_client.server_url
 			ctx.move_to(0, 0).text(url + "/register/")
-			ctx.move_to(0, 14).text(self.badge_id)
+			ctx.move_to(0, 14).text(self._secret_id)
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.font_size = 9
 		ctx.move_to(0, 80).text("any key to go back")

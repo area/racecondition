@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Badge Name</title>
+<style>
+body{font-family:sans-serif;max-width:400px;margin:40px auto;padding:0 20px;text-align:center;background:#111;color:#eee}
+h2{color:#4f4}
+input{width:100%;padding:12px;font-size:20px;box-sizing:border-box;margin:10px 0;border:2px solid #555;border-radius:8px;background:#222;color:#eee}
+button{width:100%;padding:14px;font-size:18px;background:#2a2;color:#fff;border:none;border-radius:8px;cursor:pointer}
+#msg{margin-top:16px;font-size:18px;color:#4f4}
+</style>
+</head>
+<body>
+<h2>Set your badge name for Tildateam</h2>
+<input type="text" id="name" maxlength="16" placeholder="Your name" autocomplete="off" autocorrect="off" spellcheck="false">
+<button onclick="save()">Save</button>
+<div id="msg"></div>
+<script>
+var secret_id=location.pathname.split('/').pop();
+function save(){
+  var name=document.getElementById('name').value.trim();
+  if(!name){document.getElementById('msg').textContent='Enter a name first';return;}
+  fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret_id:secret_id,username:name})})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){document.getElementById('msg').textContent='✓ Name set to: '+d.username;}
+    else{document.getElementById('msg').textContent='Error: '+(d.error||'unknown');}
+  });
+}
+document.getElementById('name').addEventListener('keydown',function(e){if(e.key==='Enter')save();});
+</script>
+</body>
+</html>

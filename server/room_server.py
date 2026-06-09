@@ -15,6 +15,7 @@ PORT = 8000
 SCRIPT_DIR = Path(__file__).resolve().parent
 ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
 LEADERBOARD_HTML_PATH = SCRIPT_DIR / "leaderboard.html"
+REGISTER_HTML_PATH = SCRIPT_DIR / "register.html"
 
 
 def _load_html(path, label):
@@ -26,46 +27,17 @@ def _load_html(path, label):
 
 ADMIN_HTML = _load_html(ADMIN_HTML_PATH, "Admin page")
 LEADERBOARD_HTML = _load_html(LEADERBOARD_HTML_PATH, "Leaderboard page")
-
-REGISTER_HTML = """<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Badge Name</title>
-<style>
-body{font-family:sans-serif;max-width:400px;margin:40px auto;padding:0 20px;text-align:center;background:#111;color:#eee}
-h2{color:#4f4}
-input{width:100%;padding:12px;font-size:20px;box-sizing:border-box;margin:10px 0;border:2px solid #555;border-radius:8px;background:#222;color:#eee}
-button{width:100%;padding:14px;font-size:18px;background:#2a2;color:#fff;border:none;border-radius:8px;cursor:pointer}
-#msg{margin-top:16px;font-size:18px;color:#4f4}
-</style>
-</head>
-<body>
-<h2>Set your badge name</h2>
-<input type="text" id="name" maxlength="16" placeholder="Your name" autocomplete="off" autocorrect="off" spellcheck="false">
-<button onclick="save()">Save</button>
-<div id="msg"></div>
-<script>
-var badge_id=location.pathname.split('/').pop();
-function save(){
-  var name=document.getElementById('name').value.trim();
-  if(!name){document.getElementById('msg').textContent='Enter a name first';return;}
-  fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({badge_id:badge_id,username:name})})
-  .then(function(r){return r.json();})
-  .then(function(d){
-    if(d.ok){document.getElementById('msg').textContent='\\u2713 Name set to: '+d.username;}
-    else{document.getElementById('msg').textContent='Error: '+(d.error||'unknown');}
-  });
-}
-document.getElementById('name').addEventListener('keydown',function(e){if(e.key==='Enter')save();});
-</script>
-</body>
-</html>"""
+REGISTER_HTML = _load_html(REGISTER_HTML_PATH, "Register page")
 
 leaderboard = FilesystemLeaderboard()
 user_registry = UserRegistry()
 rooms = {}
 _rooms_lock = threading.Lock()
+
+
+def _public_id_from_secret(secret_id):
+    import hashlib
+    return hashlib.sha256(secret_id.encode()).hexdigest()[:16]
 
 
 def _new_room():
@@ -144,7 +116,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/leaderboard":
-            self._send_json(200, {"leaderboard": leaderboard.entries()})
+            self._send_json(200, {"leaderboard": leaderboard.entries(), "usernames": user_registry.all()})
             return
 
         if re.match(r"^/register/[a-zA-Z0-9_-]+$", self.path):
@@ -160,14 +132,15 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(400, {"error": "Invalid JSON: {}".format(exc)})
                 return
-            badge_id = payload.get("badge_id")
+            secret_id = payload.get("secret_id")
             username = payload.get("username")
-            if not isinstance(badge_id, str) or not badge_id:
-                self._send_json(400, {"error": "badge_id is required"})
+            if not isinstance(secret_id, str) or not secret_id:
+                self._send_json(400, {"error": "secret_id is required"})
                 return
             if not isinstance(username, str) or not username.strip():
                 self._send_json(400, {"error": "username is required"})
                 return
+            badge_id = _public_id_from_secret(secret_id)
             user_registry.set(badge_id, username)
             self._send_json(200, {"ok": True, "username": user_registry.get(badge_id)})
             return

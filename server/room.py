@@ -311,7 +311,6 @@ class Room:
                 bid: list(b["capabilities"].keys())
                 for bid, b in self._badges.items()
             },
-            "badge_usernames": {bid: self._username(bid) for bid in self._badges},
             "module_counts": module_counts,
         }
         try:
