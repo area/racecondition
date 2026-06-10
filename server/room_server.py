@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
+import base64
 import json
+import os
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from room import Room
-from leaderboard import FilesystemLeaderboard
+from leaderboard import SqliteLeaderboard
 from usernames import UserRegistry
 
 HOST = "0.0.0.0"
 PORT = 8000
 
+_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+if not _ADMIN_PASSWORD:
+    import secrets
+    _ADMIN_PASSWORD = secrets.token_urlsafe(16)
+    print("WARNING: ADMIN_PASSWORD not set. Using generated password: {}".format(_ADMIN_PASSWORD))
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
+STATUS_HTML_PATH = SCRIPT_DIR / "status.html"
 LEADERBOARD_HTML_PATH = SCRIPT_DIR / "leaderboard.html"
 REGISTER_HTML_PATH = SCRIPT_DIR / "register.html"
 
@@ -26,10 +35,11 @@ def _load_html(path, label):
 
 
 ADMIN_HTML = _load_html(ADMIN_HTML_PATH, "Admin page")
+STATUS_HTML = _load_html(STATUS_HTML_PATH, "Status page")
 LEADERBOARD_HTML = _load_html(LEADERBOARD_HTML_PATH, "Leaderboard page")
 REGISTER_HTML = _load_html(REGISTER_HTML_PATH, "Register page")
 
-leaderboard = FilesystemLeaderboard()
+leaderboard = SqliteLeaderboard()
 user_registry = UserRegistry()
 rooms = {}
 _rooms_lock = threading.Lock()
@@ -53,6 +63,26 @@ def _delete_room(room_id):
 
 
 class RoomRequestHandler(BaseHTTPRequestHandler):
+    def _check_admin_auth(self):
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Basic "):
+            return False
+        try:
+            decoded = base64.b64decode(auth[6:]).decode("utf-8")
+            _, _, password = decoded.partition(":")
+            return password == _ADMIN_PASSWORD
+        except Exception:
+            return False
+
+    def _require_admin_auth(self):
+        if self._check_admin_auth():
+            return True
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="SpaceTeam Admin"')
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
+
     def _json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length) if length else b"{}"
@@ -77,7 +107,13 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def do_GET(self):
-        if self.path in ("/", "/admin"):
+        if self.path == "/":
+            self._send_html(200, STATUS_HTML)
+            return
+
+        if self.path == "/admin":
+            if not self._require_admin_auth():
+                return
             self._send_html(200, ADMIN_HTML)
             return
 
@@ -86,12 +122,16 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/admin/status":
+            if not self._require_admin_auth():
+                return
             with _rooms_lock:
                 room_list = list(rooms.values())
             snapshots = [r.admin_snapshot() for r in room_list]
+            badge_ids = {b["badge_id"] for s in snapshots for b in s.get("badges", [])}
             self._send_json(200, {
                 "rooms": snapshots,
                 "total_badges": sum(s["badge_count"] for s in snapshots),
+                "usernames": {bid: user_registry.get(bid) for bid in badge_ids},
             })
             return
 
@@ -177,6 +217,8 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if action == "hurry":
+            if not self._require_admin_auth():
+                return
             self._send_json(200, room.set_timer(5))
             return
 

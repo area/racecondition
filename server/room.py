@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 from threading import Lock
 
-from leaderboard import FilesystemLeaderboard
+from leaderboard import SqliteLeaderboard
 
 STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
@@ -35,7 +35,7 @@ class Room:
     def __init__(self, room_id, leaderboard=None, user_registry=None):
         self.room_id = room_id
         self._lock = Lock()
-        self._leaderboard = leaderboard if leaderboard is not None else FilesystemLeaderboard()
+        self._leaderboard = leaderboard if leaderboard is not None else SqliteLeaderboard()
         self._user_registry = user_registry
         self._reset_state()
 

@@ -30,6 +30,12 @@ _room_module = importlib.util.module_from_spec(_room_spec)
 _room_spec.loader.exec_module(_room_module)
 Room = _room_module.Room
 
+from leaderboard import InMemoryLeaderboard
+
+
+def _make_room(room_id):
+    return Room(room_id, leaderboard=InMemoryLeaderboard())
+
 TEST_HOST = "127.0.0.1"
 TEST_PORT = 18000
 BASE_URL = "http://{}:{}".format(TEST_HOST, TEST_PORT)
@@ -45,7 +51,7 @@ class RoomServerTestCase(unittest.TestCase):
     def setUpClass(cls):
         room_server.rooms.clear()
         for room_id in range(1, 6):
-            room_server.rooms[room_id] = Room(room_id)
+            room_server.rooms[room_id] = _make_room(room_id)
 
         cls.server = ThreadingHTTPServer((TEST_HOST, TEST_PORT), room_server.RoomRequestHandler)
         cls.server_thread = Thread(target=cls.server.serve_forever, daemon=True)
@@ -73,7 +79,7 @@ class RoomServerTestCase(unittest.TestCase):
 
     def test_join_room_full_returns_error(self):
         from room import MAX_BADGES
-        room_server.rooms[99] = Room(99)
+        room_server.rooms[99] = _make_room(99)
         try:
             for i in range(MAX_BADGES):
                 data, error = self.client.join_room(99, "badge-full-{}".format(i), GPS_CAPS)
@@ -126,7 +132,7 @@ class RoomServerTestCase(unittest.TestCase):
     def test_waiting_room_has_no_assignment(self):
         """Badges in waiting state should not receive assignments."""
         badge_id = "badge-waiting"
-        room_server.rooms[2] = Room(2)
+        room_server.rooms[2] = _make_room(2)
         data, error = self.client.join_room(2, badge_id, GPS_CAPS)
         self.assertIsNone(error)
         self.assertEqual(data["room_state"], "waiting")
@@ -136,7 +142,7 @@ class RoomServerTestCase(unittest.TestCase):
 
     def test_start_round_transitions_to_in_round(self):
         import json, urllib.request
-        room_server.rooms[3] = Room(3)
+        room_server.rooms[3] = _make_room(3)
         self.client.join_room(3, "badge-start", GPS_CAPS)
         url = BASE_URL + "/api/rooms/3/start"
         req = urllib.request.Request(
@@ -151,7 +157,7 @@ class RoomServerTestCase(unittest.TestCase):
 
     def test_poll_after_start_returns_assignment(self):
         import json, urllib.request
-        room_server.rooms[3] = Room(3)
+        room_server.rooms[3] = _make_room(3)
         self.client.join_room(3, "badge-start2", GPS_CAPS)
         url = BASE_URL + "/api/rooms/3/start"
         req = urllib.request.Request(
@@ -168,7 +174,7 @@ class RoomServerTestCase(unittest.TestCase):
     # ------------------------------------------------------------------ result
 
     def test_submit_passed_increments_score(self):
-        room_server.rooms[2] = Room(2)
+        room_server.rooms[2] = _make_room(2)
         badge_id = "badge-pass"
         import json, urllib.request
         join_data, _ = self.client.join_room(2, badge_id, GPS_CAPS)
@@ -198,7 +204,7 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertEqual(data["scores"]["passed"], score_before + 1)
 
     def test_submit_failed_increments_score(self):
-        room_server.rooms[2] = Room(2)
+        room_server.rooms[2] = _make_room(2)
         badge_id = "badge-fail"
         import json, urllib.request
         join_data, _ = self.client.join_room(2, badge_id, GPS_CAPS)
@@ -228,7 +234,7 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertEqual(data["scores"]["failed"], score_before + 1)
 
     def test_wrong_assignment_id_is_ignored(self):
-        room_server.rooms[2] = Room(2)
+        room_server.rooms[2] = _make_room(2)
         badge_id = "badge-wrongid"
         import json, urllib.request
         self.client.join_room(2, badge_id, GPS_CAPS)
@@ -262,7 +268,7 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertEqual(data["status"], "left")
 
     def test_room_deleted_when_last_badge_leaves(self):
-        room_server.rooms[5] = Room(5)
+        room_server.rooms[5] = _make_room(5)
         badge_id = "badge-reset"
         self.client.join_room(5, badge_id, GPS_CAPS)
         self.client.leave_room(5, badge_id)
@@ -334,7 +340,7 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertEqual(join_data["room_id"], room_id)
 
     def test_list_rooms_returns_active_rooms(self):
-        room_server.rooms[4] = Room(4)
+        room_server.rooms[4] = _make_room(4)
         self.client.join_room(4, "badge-list-test", GPS_CAPS)
         response, status = self._get_json("/api/rooms")
         self.assertEqual(status, 200)

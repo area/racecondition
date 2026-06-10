@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SpaceTeam Status</title>
+    <style>
+        :root {
+            --bg: #f4efe3;
+            --panel: #fff9ec;
+            --line: #d7c9aa;
+            --text: #2c2314;
+            --accent: #0f766e;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--text);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 20% 10%, rgba(180, 83, 9, 0.1), transparent 40%),
+                radial-gradient(circle at 90% 90%, rgba(15, 118, 110, 0.12), transparent 42%),
+                var(--bg);
+            min-height: 100vh;
+        }
+        header { padding: 20px 24px 8px; }
+        h1 {
+            margin: 0;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            letter-spacing: 0.02em;
+            font-weight: 700;
+            font-size: 30px;
+        }
+        .sub { opacity: 0.8; margin-top: 6px; font-size: 14px; }
+        main {
+            display: grid;
+            gap: 16px;
+            padding: 16px 24px 28px;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 280px));
+        }
+        .no-rooms {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 64px 24px;
+            opacity: 0.55;
+        }
+        .no-rooms-icon { font-size: 48px; line-height: 1; margin-bottom: 12px; }
+        .no-rooms p { margin: 4px 0; font-size: 15px; }
+        .room {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 8px 18px rgba(44, 35, 20, 0.06);
+        }
+        .room h2 {
+            margin: 0 0 10px;
+            font-size: 20px;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+        .state-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .state-waiting  { background: #fef3c7; color: #92400e; }
+        .state-in-round { background: #dcfce7; color: #166534; }
+        .state-finished { background: #e0e7ff; color: #3730a3; }
+        .footer { padding: 4px 24px 20px; font-size: 12px; opacity: 0.75; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>SpaceTeam</h1>
+        <div class="sub">Live room status</div>
+    </header>
+    <main id="rooms">
+        <div class="no-rooms" id="no-rooms">
+            <div class="no-rooms-icon">🚀</div>
+            <p><strong>No rooms open</strong></p>
+        </div>
+    </main>
+    <div class="footer" id="updated">Waiting for data...</div>
+
+    <script>
+        const roomsEl = document.getElementById("rooms");
+        const updatedEl = document.getElementById("updated");
+        const noRoomsEl = document.getElementById("no-rooms");
+        const roomNodes = new Map();
+
+        function roomCard(room) {
+            const state = room.room_state || "waiting";
+            const stateLabel = { waiting: "Waiting", "in-round": "In Round", finished: "Finished" }[state] || state;
+            const stateClass = { waiting: "state-waiting", "in-round": "state-in-round", finished: "state-finished" }[state] || "";
+            return `
+                <section class="room">
+                    <h2>Room ${room.room_id} <span class="state-badge ${stateClass}">${stateLabel}</span></h2>
+                    <div class="row"><span>Badges connected</span><strong>${room.badge_count}</strong></div>
+                </section>
+            `;
+        }
+
+        async function refresh() {
+            try {
+                const response = await fetch('/api/rooms');
+                const data = await response.json();
+                const rooms = data.rooms || [];
+                const seen = new Set();
+
+                for (const room of rooms) {
+                    const key = String(room.room_id);
+                    seen.add(key);
+                    const existing = roomNodes.get(key);
+                    if (!existing) {
+                        const wrapper = document.createElement("div");
+                        wrapper.innerHTML = roomCard(room).trim();
+                        const node = wrapper.firstElementChild;
+                        roomNodes.set(key, node);
+                        roomsEl.appendChild(node);
+                    } else {
+                        const wrapper = document.createElement("div");
+                        wrapper.innerHTML = roomCard(room).trim();
+                        existing.innerHTML = wrapper.firstElementChild.innerHTML;
+                    }
+                }
+
+                for (const [key, node] of roomNodes.entries()) {
+                    if (!seen.has(key)) { node.remove(); roomNodes.delete(key); }
+                }
+
+                noRoomsEl.style.display = roomNodes.size === 0 ? "" : "none";
+                updatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()} | ${rooms.length} room${rooms.length !== 1 ? "s" : ""} open`;
+            } catch (err) {
+                updatedEl.textContent = `Fetch failed: ${err}`;
+            }
+        }
+
+        refresh();
+        setInterval(refresh, 2000);
+    </script>
+</body>
+</html>

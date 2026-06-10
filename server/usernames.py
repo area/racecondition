@@ -1,30 +1,41 @@
-import json
-from pathlib import Path
+import threading
 
+from db import open_db
 from names import generate_name
-
-USERNAMES_PATH = Path(__file__).resolve().parent / "usernames.json"
 
 
 class UserRegistry:
     def __init__(self, path=None):
-        self._path = path or USERNAMES_PATH
-        self._data = json.loads(self._path.read_text()) if self._path.exists() else {}
+        self._conn = open_db(path)
+        self._lock = threading.Lock()
 
     def set(self, badge_id, username):
         username = username.strip()[:16]
         if not username:
             return
-        self._data[badge_id] = username
-        self._path.write_text(json.dumps(self._data, indent=2))
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO usernames (badge_id, username) VALUES (?, ?)"
+                " ON CONFLICT(badge_id) DO UPDATE SET username = excluded.username",
+                (badge_id, username),
+            )
+            self._conn.commit()
 
     def get(self, badge_id):
-        return self._data.get(badge_id) or generate_name(badge_id)
+        row = self._conn.execute(
+            "SELECT username FROM usernames WHERE badge_id = ?", (badge_id,)
+        ).fetchone()
+        return row[0] if row else generate_name(badge_id)
 
     def delete(self, badge_id):
-        if badge_id in self._data:
-            del self._data[badge_id]
-            self._path.write_text(json.dumps(self._data, indent=2))
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM usernames WHERE badge_id = ?", (badge_id,)
+            )
+            self._conn.commit()
 
     def all(self):
-        return dict(self._data)
+        rows = self._conn.execute(
+            "SELECT badge_id, username FROM usernames"
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
