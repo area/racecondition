@@ -18,12 +18,30 @@ class HexpansionModule:
     def check_command(self) -> str:
         return self.last_status
 
-    # This only needs overriding if the hexpansion's capabilities depend on its state.
+    # This only needs overriding if the hexpansion's capabilities depend on something other than being
+    # plugged in
     def get_capabilities(self):
         return {
             "module": self.FRIENDLY_NAME,
             "commands": list(self.COMMAND_OPTIONS),
         }
+
+    # Will need overriding if, on receiving a command, some action needs to occur to prepare the hexpansion
+    # to receive that command
+    def set_command(self, command):
+        if command not in self.COMMAND_OPTIONS:
+            raise ValueError("Unsupported command '{}' for {}".format(command, self.FRIENDLY_NAME))
+        self.current_command = command
+        self.last_status = CommandStatus.WAITING
+        return self.current_command
+
+    # This method is used to determine if the hexpansion is connected. It should be overridden if the hexpansion's connection status
+    # depends on something other than being plugged in. Struggling to see what that might be, but it's here!
+    def is_connected(self, hexpansions):
+        for item in hexpansions.values():
+            if item["known"] and item["name"] == self.FRIENDLY_NAME:
+                return True
+        return False
 
     def __init__(self):
         self.reset()
@@ -32,17 +50,5 @@ class HexpansionModule:
         self.current_command = None
         self.last_status = CommandStatus.WAITING
 
-    def is_connected(self, hexpansions):
-        for item in hexpansions.values():
-            if item["known"] and item["name"] == self.FRIENDLY_NAME:
-                return True
-        return False
-
-    def set_command(self, command):
-        if command not in self.COMMAND_OPTIONS:
-            raise ValueError("Unsupported command '{}' for {}".format(command, self.FRIENDLY_NAME))
-        self.current_command = command
-        self.last_status = CommandStatus.WAITING
-        return self.current_command
 
 

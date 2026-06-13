@@ -240,7 +240,7 @@
             </tr>
             <tr>
                 <td>is_connected(hexpansions)</td>
-                <td>Called on every scan. Return <code>True</code> if the hardware is present. The default implementation checks for a matching <code>FRIENDLY_NAME</code> in the <code>hexpansions</code> dict.</td>
+                <td>Called on every scan. Return <code>True</code> if the hardware is present. The default implementation checks for a matching <code>FRIENDLY_NAME</code> in the <code>hexpansions</code> dict. Override only if connection status depends on something other than the hexpansion being physically plugged in.</td>
             </tr>
             <tr>
                 <td>on_button_down(event)</td>
@@ -252,7 +252,7 @@
             </tr>
             <tr>
                 <td>get_capabilities()</td>
-                <td>Returns <code>{"module": FRIENDLY_NAME, "commands": COMMAND_OPTIONS}</code>. Override only if your available commands are dynamic at runtime.</td>
+                <td>Returns <code>{"module": FRIENDLY_NAME, "commands": COMMAND_OPTIONS}</code>. Override if the hexpansion's capabilities depend on something other than being plugged in — for example, if commands are only available after acquiring a sensor fix, or if the method needs to perform background work (e.g. draining a UART buffer) each poll cycle.</td>
             </tr>
             <tr>
                 <td>set_command(command)</td>
@@ -299,11 +299,11 @@
         <strong>Sensor-based commands</strong> (like GPS or shake) can't rely on <code>on_button_down</code>. Override <code>check_command</code> instead and read your hardware there. It's called on every poll (~1 s), so keep it fast — avoid blocking I/O.
     </div>
 
-    <h3>Dynamic command lists</h3>
-    <p>Override <code>get_capabilities</code> if your available commands depend on hardware state. Two real examples:</p>
+    <h3>Overriding <code>get_capabilities</code></h3>
+    <p>Override <code>get_capabilities</code> when the hexpansion's reported capabilities depend on something other than being plugged in. Two real examples:</p>
     <ul>
-        <li><strong>MegaDrive</strong> — expands from 8 to 12 commands when a 6-button pad is detected. It updates <code>self.COMMAND_OPTIONS</code> on the instance and the base <code>get_capabilities</code> picks it up automatically.</li>
-        <li><strong>GPS</strong> — reports no commands until it has a GPS fix, then advertises <code>move 5m away</code>. It also drains the UART buffer inside <code>get_capabilities</code> so it keeps acquiring a fix in the background even before any command is assigned.</li>
+        <li><strong>MegaDrive</strong> — expands from 8 to 12 commands when a 6-button pad is detected. It updates <code>self.COMMAND_OPTIONS</code> on the instance and the base <code>get_capabilities</code> picks it up automatically, so no override is needed in that case.</li>
+        <li><strong>GPS</strong> — reports no commands until it has a fix, then advertises <code>move 5m away</code>. It overrides <code>get_capabilities</code> to drain the UART buffer each poll cycle so it keeps acquiring a fix in the background even before any command is assigned.</li>
     </ul>
     <p>The updated list is sent to the server on the next poll so it can start (or stop) issuing those commands.</p>
 
