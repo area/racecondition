@@ -50,10 +50,10 @@ class GPSModule(HexpansionModule):
         self._command_started_ms = None
         self._buffer = b""
 
-    def generate_command(self):
-        self.current_command = "move 5m away"
-        self._setup_command()
-        return self.current_command
+    def get_capabilities(self):
+        self._read_uart()
+        commands = list(self.COMMAND_OPTIONS) if self._current_pos is not None else []
+        return {"module": self.FRIENDLY_NAME, "commands": commands}
 
     def set_command(self, command):
         result = super().set_command(command)
@@ -65,9 +65,6 @@ class GPSModule(HexpansionModule):
         self._start_pos = self._current_pos  # snapshot current position (may be None)
         print("[GPS] Command setup. Start pos: {}".format(self._start_pos))
 
-    def on_button_down(self, event):
-        pass
-
     def check_command(self):
         self._read_uart()
 
@@ -76,10 +73,6 @@ class GPSModule(HexpansionModule):
             if self._current_pos is not None:
                 print("[GPS] Latching start pos: {}".format(self._current_pos))
                 self._start_pos = self._current_pos
-            return CommandStatus.WAITING
-
-        if self._current_pos is None:
-            print("[GPS] No fix yet.")
             return CommandStatus.WAITING
 
         dist = _distance_m(

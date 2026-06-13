@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import base64
 import json
+import logging
 import os
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 from room import Room
 from leaderboard import SqliteLeaderboard
@@ -22,22 +25,27 @@ if not _ADMIN_PASSWORD:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
-STATUS_HTML_PATH = SCRIPT_DIR / "status.html"
+INDEX_HTML_PATH = SCRIPT_DIR / "index.html"
+HEXPANSIONS_HTML_PATH = SCRIPT_DIR / "hexpansions.html"
 LEADERBOARD_HTML_PATH = SCRIPT_DIR / "leaderboard.html"
 REGISTER_HTML_PATH = SCRIPT_DIR / "register.html"
 
 
+_html_cache: dict = {}
+
 def _load_html(path, label):
     try:
-        return path.read_text(encoding="utf-8")
+        mtime = path.stat().st_mtime
+        cached = _html_cache.get(path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        content = path.read_text(encoding="utf-8")
+        _html_cache[path] = (mtime, content)
+        return content
     except OSError as exc:
         return "<h1>{} unavailable</h1><p>{}</p>".format(label, exc)
 
 
-ADMIN_HTML = _load_html(ADMIN_HTML_PATH, "Admin page")
-STATUS_HTML = _load_html(STATUS_HTML_PATH, "Status page")
-LEADERBOARD_HTML = _load_html(LEADERBOARD_HTML_PATH, "Leaderboard page")
-REGISTER_HTML = _load_html(REGISTER_HTML_PATH, "Register page")
 
 leaderboard = SqliteLeaderboard()
 user_registry = UserRegistry()
@@ -108,17 +116,24 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/":
-            self._send_html(200, STATUS_HTML)
+            self._send_html(200, _load_html(INDEX_HTML_PATH, "Index page"))
             return
 
         if self.path == "/admin":
             if not self._require_admin_auth():
                 return
-            self._send_html(200, ADMIN_HTML)
+            self._send_html(200, _load_html(ADMIN_HTML_PATH, "Admin page"))
+            return
+
+        if self.path == "/hexpansions":
+            self._send_html(200, _load_html(HEXPANSIONS_HTML_PATH, "Hexpansions page"))
             return
 
         if self.path == "/leaderboard":
-            self._send_html(200, LEADERBOARD_HTML)
+            self.send_response(302)
+            self.send_header("Location", "/#leaderboard")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
 
         if self.path == "/api/admin/status":
@@ -163,7 +178,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             return
 
         if re.match(r"^/register/[a-zA-Z0-9_-]+$", self.path):
-            self._send_html(200, REGISTER_HTML)
+            self._send_html(200, _load_html(REGISTER_HTML_PATH, "Register page"))
             return
 
         self._send_json(404, {"error": "Not found"})

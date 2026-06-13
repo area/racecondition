@@ -1,6 +1,3 @@
-import random
-
-
 class CommandStatus:
     PASSED = "passed"
     FAILED = "failed"
@@ -10,6 +7,23 @@ class CommandStatus:
 class HexpansionModule:
     FRIENDLY_NAME = None
     COMMAND_OPTIONS = []
+
+    # I would expect every hexpansion to need to override one, or both, of the on_button_down and
+    # check_command methods. If you override on_button_down, you want to set self.last_status to CommandStatus.PASSED
+    # when the command is successfully completed. If you override check_command, you want to return CommandStatus.PASSED
+    # when the command is successfully completed, and CommandStatus.WAITING otherwise.
+    def on_button_down(self, event):
+        pass
+
+    def check_command(self) -> str:
+        return self.last_status
+
+    # This only needs overriding if the hexpansion's capabilities depend on its state.
+    def get_capabilities(self):
+        return {
+            "module": self.FRIENDLY_NAME,
+            "commands": list(self.COMMAND_OPTIONS),
+        }
 
     def __init__(self):
         self.reset()
@@ -24,11 +38,6 @@ class HexpansionModule:
                 return True
         return False
 
-    def generate_command(self):
-        self.current_command = random.choice(self.COMMAND_OPTIONS)
-        self.last_status = CommandStatus.WAITING
-        return self.current_command
-
     def set_command(self, command):
         if command not in self.COMMAND_OPTIONS:
             raise ValueError("Unsupported command '{}' for {}".format(command, self.FRIENDLY_NAME))
@@ -36,14 +45,4 @@ class HexpansionModule:
         self.last_status = CommandStatus.WAITING
         return self.current_command
 
-    def get_capabilities(self):
-        return {
-            "module": self.FRIENDLY_NAME,
-            "commands": list(self.COMMAND_OPTIONS),
-        }
 
-    def on_button_down(self, event):
-        pass
-
-    def check_command(self) -> str:
-        return self.last_status

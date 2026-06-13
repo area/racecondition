@@ -1,9 +1,12 @@
+import logging
 import math
 import random
 import secrets
 import time
 from datetime import datetime, timezone
 from threading import Lock
+
+log = logging.getLogger(__name__)
 
 from leaderboard import SqliteLeaderboard
 
@@ -52,7 +55,8 @@ class Room:
     def poll(self, badge_id, capabilities, result=None, session_token=None):
         with self._lock:
             self._prune_stale()
-            self._set_badge(badge_id, _normalize_capabilities(capabilities))
+            norm = _normalize_capabilities(capabilities) if capabilities is not None else None
+            self._set_badge(badge_id, norm)
             self._check_expiry()
             if result is not None and self._state == "in-round":
                 if session_token == self._session_tokens.get(badge_id):
@@ -69,13 +73,16 @@ class Room:
             self._colours.pop(badge_id, None)
             self._badge_scores.pop(badge_id, None)
             self._session_tokens.pop(badge_id, None)
+            self._last_sent_players_gen.pop(badge_id, None)
             self._ready.discard(badge_id)
             if not self._badges:
                 self._reset_state()
-            elif self._state == "finished":
-                self._check_all_dismissed()
-            elif self._state == "waiting":
-                self._check_all_ready()
+            else:
+                self._players_generation += 1
+                if self._state == "finished":
+                    self._check_all_dismissed()
+                elif self._state == "waiting":
+                    self._check_all_ready()
             badge_count = len(self._badges)
         return {"room_id": self.room_id, "status": "left", "badge_count": badge_count}
 
@@ -152,6 +159,8 @@ class Room:
         self._round_started_at = None
         self._dismissed = set()
         self._ready = set()
+        self._players_generation = 0
+        self._last_sent_players_gen = {}
 
     def _now(self):
         return time.monotonic()
@@ -177,17 +186,20 @@ class Room:
             self._colours.pop(bid, None)
             self._badge_scores.pop(bid, None)
             self._session_tokens.pop(bid, None)
+            self._last_sent_players_gen.pop(bid, None)
             self._dismissed.discard(bid)
             self._ready.discard(bid)
         if not self._badges:
             self._reset_state()
         elif stale:
+            self._players_generation += 1
             if self._state == "finished":
                 self._check_all_dismissed()
             elif self._state == "waiting":
                 self._check_all_ready()
 
     def _set_badge(self, badge_id, capabilities):
+        is_new = badge_id not in self._badges
         if badge_id not in self._colours:
             used = set(self._colours.values())
             self._colours[badge_id] = next((c for c in COLOURS if c not in used), COLOURS[0])
@@ -195,7 +207,11 @@ class Room:
             self._badge_scores[badge_id] = {"passed": 0, "failed": 0}
         if badge_id not in self._session_tokens:
             self._session_tokens[badge_id] = secrets.token_hex(16)
+        if capabilities is None:
+            capabilities = self._badges[badge_id]["capabilities"] if not is_new else {}
         self._badges[badge_id] = {"capabilities": capabilities, "last_seen": self._now()}
+        if is_new:
+            self._players_generation += 1
 
     def _command_pool(self):
         return [
@@ -222,6 +238,7 @@ class Room:
                     "time_remaining_s": ASSIGNMENT_TIMEOUT_S - age,
                     "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
                 }
+            log.info("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], existing["module"], existing["command"])
             self._scores["failed"] += 1
             self._badge_scores.setdefault(badge_id, {"passed": 0, "failed": 0})["failed"] += 1
             self._assignments.pop(badge_id, None)
@@ -230,10 +247,12 @@ class Room:
             return None
         candidates = [(m, c) for m, c in self._command_pool() if self._badge_can_run(badge_id, m, c)]
         if not candidates:
+            log.debug("room=%s badge=%s no candidates available", self.room_id, badge_id[-6:])
             return None
         module, command = random.choice(candidates)
         assignment_id = "{}-{}".format(id(self), self._next_assignment_id)
         self._next_assignment_id += 1
+        log.info("room=%s badge=%s assigned module=%s command=%s id=%s", self.room_id, badge_id[-6:], module, command, assignment_id)
         self._assignments[badge_id] = {
             "id": assignment_id, "target_badge_id": badge_id,
             "module": module, "command": command, "issued_at": now,
@@ -338,10 +357,16 @@ class Room:
     def _poll_response(self, badge_id):
         self._check_expiry()
         in_round = self._state == "in-round"
-        players = [
-            {"colour": self._colours.get(bid), "username": self._username(bid) or self._colours.get(bid)}
-            for bid in self._badges
-        ]
+        current_gen = self._players_generation
+        if self._last_sent_players_gen.get(badge_id) != current_gen:
+            self._last_sent_players_gen[badge_id] = current_gen
+            players = [
+                {"colour": self._colours.get(bid), "username": self._username(bid) or self._colours.get(bid)}
+                for bid in self._badges
+            ]
+        else:
+            players = None
+        has_caps = bool(self._badges.get(badge_id, {}).get("capabilities"))
         return {
             "room_id": self.room_id,
             "room_state": self._state,
@@ -359,4 +384,5 @@ class Room:
             "is_dismissed": (badge_id in self._dismissed) if self._state == "finished" else None,
             "overall_score": self._calculate_score() if self._state == "finished" else None,
             "players": players,
+            "need_capabilities": not has_caps,
         }

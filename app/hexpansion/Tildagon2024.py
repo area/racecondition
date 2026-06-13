@@ -12,13 +12,13 @@ class Tildagon2024Module(HexpansionModule):
     COMMAND_OPTIONS = ["a", "b", "c", "d", "e", "f", "shake"]
 
     def __init__(self):
+        self._has_hexpansions = False
         super().__init__()
 
     def reset(self):
         super().reset()
         self._shake_started_ms = None
         self._last_accel = None
-        self._has_hexpansions = False
 
     def is_connected(self, hexpansions):
         self._has_hexpansions = any(v["known"] for v in hexpansions.values())
@@ -28,13 +28,6 @@ class Tildagon2024Module(HexpansionModule):
         if self._has_hexpansions:
             return [c for c in self.COMMAND_OPTIONS if c != "shake"]
         return list(self.COMMAND_OPTIONS)
-
-    def generate_command(self):
-        command = random.choice(self._safe_commands())
-        self.current_command = command
-        self.last_status = CommandStatus.WAITING
-        self._setup_command(command)
-        return command
 
     def get_capabilities(self):
         return {

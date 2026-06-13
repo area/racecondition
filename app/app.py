@@ -69,6 +69,7 @@ class TildateamApp(app.App):
 		self._test_session = None
 		self._qr_active = False
 		self._qr_matrix = None
+		self._caps_dirty = True
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -239,6 +240,7 @@ class TildateamApp(app.App):
 				"known": friendly_name is not None,
 			}
 		self.connected_modules = self.module_registry.scan(hexpansions)
+		self._caps_dirty = True
 		if self.session.expected_module and self.module_registry.get_by_name(self.session.expected_module.FRIENDLY_NAME) is None:
 			self.session.clear_assignment()
 
@@ -252,6 +254,7 @@ class TildateamApp(app.App):
 		self._network_error_shown = False
 		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
+		self._caps_dirty = True
 		if self.room_client.available():
 			data, error = self.room_client.join_room(
 				self.session.room_id,
@@ -262,6 +265,7 @@ class TildateamApp(app.App):
 				self.notification = Notification("Join failed: {}".format(error))
 			elif data:
 				self.session.session_token = data.get("session_token")
+				self._caps_dirty = False
 		self._poll_server(force=True)
 
 	def _start_round(self):
@@ -290,14 +294,29 @@ class TildateamApp(app.App):
 			self._poll_server(force=True)
 
 	def _start_testing(self):
+		if not self.connected_modules:
+			self.notification = Notification("No modules connected")
+			return
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
-		ts = TestSession(self.connected_modules)
-		if ts.state == "done":
-			self.notification = Notification("No modules connected")
+		items = [m.FRIENDLY_NAME for m in self.connected_modules] + ["Back"]
+		self.menu = Menu(
+			self,
+			items,
+			select_handler=self._test_menu_select,
+			back_handler=self._back_to_main,
+		)
+
+	def _test_menu_select(self, item, idx):
+		if item == "Back":
+			self._back_to_main()
 			return
-		self._test_session = ts
+		module = self.connected_modules[idx]
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
+		self._test_session = TestSession([module])
 
 	def _show_qr_screen(self):
 		if self.menu:
@@ -360,10 +379,11 @@ class TildateamApp(app.App):
 				self._network_error_shown = True
 			return
 
+		caps = self._capabilities() if self._caps_dirty else None
 		data, error = self.room_client.poll(
 			self.session.room_id,
 			self.badge_id,
-			self._capabilities(),
+			caps,
 			result=self.session.pending_result,
 			session_token=self.session.session_token,
 		)
@@ -372,6 +392,11 @@ class TildateamApp(app.App):
 			return
 		if data is None:
 			return
+
+		if caps is not None:
+			self._caps_dirty = False
+		if data.get("need_capabilities"):
+			self._caps_dirty = True
 
 		new_colour = self.session.apply_poll_response(
 			data,

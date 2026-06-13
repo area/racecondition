@@ -34,14 +34,15 @@ class RoomClient:
         }
         return self._post("/api/rooms/{}/join".format(room_id), payload)
 
-    def poll(self, room_id, badge_id, capabilities, result=None, session_token=None):
+    def poll(self, room_id, badge_id, capabilities=None, result=None, session_token=None):
         payload = {
             "badge_id": badge_id,
-            "capabilities": capabilities,
             "result": result,
             "session_token": session_token,
             "timestamp_ms": self._timestamp_ms(),
         }
+        if capabilities is not None:
+            payload["capabilities"] = capabilities
         return self._post("/api/rooms/{}/poll".format(room_id), payload)
 
     def leave_room(self, room_id, badge_id, session_token=None):

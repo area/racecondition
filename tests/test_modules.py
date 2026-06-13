@@ -166,17 +166,6 @@ class TestTildagon2024Module(unittest.TestCase):
     def test_is_always_connected(self):
         self.assertTrue(self.m.is_connected({}))
 
-    def test_generate_command_excludes_shake_when_hexpansions_present(self):
-        self.m.is_connected({1: {"known": True, "name": "GPS"}})
-        for _ in range(50):
-            cmd = self.m.generate_command()
-            self.assertNotEqual(cmd, "shake")
-
-    def test_generate_command_can_return_shake_when_no_hexpansions(self):
-        self.m.is_connected({})
-        commands = {self.m.generate_command() for _ in range(100)}
-        self.assertIn("shake", commands)
-
     def test_capabilities_excludes_shake_when_hexpansions_present(self):
         self.m.is_connected({1: {"known": True, "name": "GPS"}})
         self.assertNotIn("shake", self.m.get_capabilities()["commands"])

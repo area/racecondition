@@ -1,45 +1,74 @@
-## VID/PID friendly-name lookup
+## Setup
 
-Generate the lookup module used by the app from EEPROM manifests in
-the `hexpansion-firmwares` submodule:
+### Badge client URL
+
+Set the server address in `app/room_client.py`:
+
+```python
+DEFAULT_SERVER_URL = "http://<server-ip>:8000"
+```
+
+### Hexpansion name lookup
+
+Generate the friendly-name module from EEPROM manifests in the `hexpansion-firmwares` submodule:
 
 ```bash
 python3 scripts/generate_hexpansion_names.py
 ```
 
-This writes `app/hexpansion_names.py`, which is imported by the app to
-display a friendly device name when a hexpansion is detected.
+This writes `app/hexpansion_names.py`, imported by the app to display a friendly device name when a hexpansion is detected.
 
-## Server-Controlled Rooms
+## Running the server
 
-The app now runs in server-controlled mode:
-
-- A badge joins one of 5 rooms.
-- The badge reports its available module commands to the server.
-- The server issues one assignment for that badge.
-- The command shown on screen may be another badge's assignment from the same room.
-
-### Run The Room Server
-
-From the repo root:
+From the `server/` directory:
 
 ```bash
-python3 scripts/room_server.py
+cd server
+python3 room_server.py
 ```
 
-By default this listens on `0.0.0.0:8000`.
+Listens on `0.0.0.0:8000` by default.
 
-### Admin Webpage
+### Environment variables
 
-Once the server is running, open:
+| Variable | Default | Notes |
+|---|---|---|
+| `ADMIN_PASSWORD` | (random, printed on startup) | Password for admin-protected endpoints |
 
-- `http://<server-host>:8000/admin`
+If `ADMIN_PASSWORD` is not set, a random password is generated and printed to stdout on each start.
 
-This live dashboard shows room occupancy, active assignments, and pass/fail scores.
+### Database
 
-Raw status JSON is available at:
+SQLite at `server/tildateam.db`. Created automatically on first run. Contains `usernames` and `leaderboard_entries` tables.
 
-- `http://<server-host>:8000/api/admin/status`
+## Web pages
 
-The badge client URL is set in `app/room_client.py` as `DEFAULT_SERVER_URL`.
-Change this to the server's reachable IP/hostname for your network.
+| Path | Auth | Purpose |
+|---|---|---|
+| `/` | — | Public dashboard (leaderboard, room list) |
+| `/admin` | Basic auth | Live room monitor: occupancy, assignments, scores |
+| `/hexpansions` | — | Connected hexpansion types across all rooms |
+| `/register/<token>` | — | Badge username registration page |
+
+## API
+
+### Public
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/rooms` | Active rooms with badge count and state |
+| GET | `/api/leaderboard` | All completed round scores |
+| POST | `/api/rooms/create` | Create a new room |
+| POST | `/api/register` | Register or clear a badge username |
+| POST | `/api/rooms/<id>/join` | Join a room |
+| POST | `/api/rooms/<id>/poll` | Poll for state, submit result |
+| POST | `/api/rooms/<id>/leave` | Leave a room |
+| POST | `/api/rooms/<id>/start` | Mark ready / start round |
+| POST | `/api/rooms/<id>/dismiss` | Dismiss the score screen |
+
+### Admin (Basic auth required)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/admin/status` | Full snapshot of all rooms |
+| POST | `/api/rooms/<id>/hurry` | Set round timer to 5 seconds |

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hexpansion Support — Tildateam</title>
+    <style>
+        :root {
+            --bg: #f4efe3;
+            --panel: #fff9ec;
+            --line: #d7c9aa;
+            --text: #2c2314;
+            --accent: #0f766e;
+            --accent-2: #b45309;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--text);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background: var(--bg);
+        }
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(244, 239, 227, 0.92);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            height: 52px;
+        }
+        .nav-brand {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: 0.02em;
+            text-decoration: none;
+            color: var(--text);
+        }
+        .nav-back {
+            font-size: 14px;
+            color: var(--text);
+            text-decoration: none;
+            opacity: 0.65;
+        }
+        .nav-back:hover { opacity: 1; }
+
+        .page {
+            max-width: 740px;
+            margin: 0 auto;
+            padding: 52px 24px 72px;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+        }
+        .lead {
+            font-size: 16px;
+            line-height: 1.65;
+            opacity: 0.75;
+            margin: 0 0 48px;
+            max-width: 560px;
+        }
+        h2 {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            margin: 48px 0 14px;
+            padding-top: 48px;
+            border-top: 1px solid var(--line);
+        }
+        h2:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+        h3 {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            margin: 28px 0 8px;
+        }
+        p { font-size: 15px; line-height: 1.65; margin: 0 0 14px; }
+        p:last-child { margin-bottom: 0; }
+        a { color: var(--accent); }
+        ul, ol { font-size: 15px; line-height: 1.7; margin: 0 0 14px; padding-left: 22px; }
+        li { margin-bottom: 4px; }
+        code {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.88em;
+            background: rgba(15, 118, 110, 0.08);
+            border-radius: 4px;
+            padding: 1px 5px;
+        }
+        pre {
+            background: #1e1a14;
+            color: #e8dfc8;
+            border-radius: 10px;
+            padding: 18px 20px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 12px 0 20px;
+            font-family: "IBM Plex Mono", monospace;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            font-size: inherit;
+            color: inherit;
+            border-radius: 0;
+        }
+        .hl-kw  { color: #7dd3c8; }
+        .hl-str { color: #c8a96e; }
+        .hl-cmt { color: #6e6458; font-style: italic; }
+        .hl-cls { color: #e8c57a; }
+        .hl-fn  { color: #a8d4a8; }
+        .hl-num { color: #d4a8a8; }
+
+        .callout {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--accent);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 16px 0;
+        }
+        .callout-warn {
+            border-left-color: var(--accent-2);
+        }
+
+        .api-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 20px;
+            font-size: 14px;
+        }
+        .api-table th {
+            text-align: left;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            opacity: 0.55;
+            border-bottom: 2px solid var(--line);
+        }
+        .api-table td {
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--line);
+            vertical-align: top;
+        }
+        .api-table tr:last-child td { border-bottom: none; }
+        .api-table td:first-child { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; white-space: nowrap; }
+
+        .step-list { list-style: none; padding: 0; margin: 0 0 20px; }
+        .step-list li {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .step-n {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 1px;
+        }
+
+        .existing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+        }
+        .existing-card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 14px;
+            font-size: 13px;
+        }
+        .existing-card strong {
+            display: block;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+        .existing-card .file-path {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 11px;
+            opacity: 0.55;
+            margin-bottom: 6px;
+        }
+        .existing-card p { font-size: 13px; margin: 0; opacity: 0.75; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="nav-brand" href="/">Tildateam</a>
+    <a class="nav-back" href="/#hexpansions">← Back</a>
+</nav>
+
+<div class="page">
+    <h1>Adding Hexpansion support</h1>
+    <p class="lead">Each supported Hexpansion is a small Python class living in <code>app/hexpansion/</code>. It tells the game how to detect the hardware, what commands it can receive, and how to know when a command has been completed.</p>
+
+    <h2>How it works</h2>
+    <p>When a badge joins a room it reports its <em>capabilities</em> — a list of Hexpansions it has detected and the commands each one supports. The server uses this to assign commands only to badges that can actually carry them out.</p>
+    <p>On every poll the badge checks whether its current command has been completed and reports the result. If it has, the server clears it and issues a new one.</p>
+
+    <h2>The base class</h2>
+    <p>All Hexpansion modules extend <code>HexpansionModule</code> from <code>app/hexpansion/base.py</code>.</p>
+
+    <table class="api-table">
+        <thead><tr><th>Attribute / method</th><th>What to do</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>FRIENDLY_NAME</td>
+                <td>Class-level string. Must exactly match the name in the Hexpansion's EEPROM manifest. Used to detect presence.</td>
+            </tr>
+            <tr>
+                <td>COMMAND_OPTIONS</td>
+                <td>Class-level list of strings. Every possible command this Hexpansion can receive. Can be overridden at instance level if commands are dynamic (see MegaDrive).</td>
+            </tr>
+            <tr>
+                <td>is_connected(hexpansions)</td>
+                <td>Called on every scan. Return <code>True</code> if the hardware is present. The default implementation checks for a matching <code>FRIENDLY_NAME</code> in the <code>hexpansions</code> dict.</td>
+            </tr>
+            <tr>
+                <td>on_button_down(event)</td>
+                <td>Called for every button event on the badge. If the event matches the current command, set <code>self.last_status = CommandStatus.PASSED</code>.</td>
+            </tr>
+            <tr>
+                <td>check_command()</td>
+                <td>Called every poll cycle. Return <code>CommandStatus.PASSED</code>, <code>WAITING</code>, or <code>FAILED</code>. Default returns <code>self.last_status</code> — fine for button-based Hexpansions; override for sensor polling (GPS, shake).</td>
+            </tr>
+            <tr>
+                <td>get_capabilities()</td>
+                <td>Returns <code>{"module": FRIENDLY_NAME, "commands": COMMAND_OPTIONS}</code>. Override only if your available commands are dynamic at runtime.</td>
+            </tr>
+            <tr>
+                <td>set_command(command)</td>
+                <td>Called by the app when a new assignment arrives. The base implementation validates the command against <code>COMMAND_OPTIONS</code> and resets <code>last_status</code> to <code>WAITING</code>. Override to do per-command setup (e.g. snapshot a position, arm a sensor). Always call <code>super().set_command(command)</code> first.</td>
+            </tr>
+            <tr>
+                <td>reset()</td>
+                <td>Called when the Hexpansion disconnects, or between rounds. Clear any hardware state here. Call <code>super().reset()</code> first.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>The <code>hexpansions</code> dict</h3>
+    <p><code>is_connected</code> receives a dict keyed by port number (1–6):</p>
+    <pre><code><span class="hl-cmt"># hexpansions passed to is_connected()</span>
+{
+    <span class="hl-num">1</span>: {<span class="hl-str">"known"</span>: <span class="hl-kw">True</span>,  <span class="hl-str">"name"</span>: <span class="hl-str">"MegaDrive"</span>, ...},
+    <span class="hl-num">2</span>: {<span class="hl-str">"known"</span>: <span class="hl-kw">False</span>, ...},  <span class="hl-cmt"># connected but EEPROM unrecognised</span>
+    <span class="hl-cmt"># unpopulated ports are absent</span>
+}</code></pre>
+    <p>The default <code>is_connected</code> implementation checks <code>item["known"] and item["name"] == self.FRIENDLY_NAME</code>, which is correct for anything with a standard EEPROM manifest.</p>
+
+    <h2>Writing a new module</h2>
+    <p>Here's a minimal example — a hypothetical Hexpansion with a single big red button:</p>
+    <pre><code><span class="hl-kw">from</span> .base <span class="hl-kw">import</span> HexpansionModule, CommandStatus
+
+
+<span class="hl-kw">class</span> <span class="hl-cls">BigRedButtonModule</span>(HexpansionModule):
+    <span class="hl-cls">FRIENDLY_NAME</span> = <span class="hl-str">"BigRedButton"</span>  <span class="hl-cmt"># must match EEPROM name exactly</span>
+    <span class="hl-cls">COMMAND_OPTIONS</span> = [<span class="hl-str">"press"</span>]
+
+    <span class="hl-kw">def</span> <span class="hl-fn">on_button_down</span>(self, event):
+        button = <span class="hl-fn">getattr</span>(event, <span class="hl-str">"button"</span>, <span class="hl-kw">None</span>)
+        <span class="hl-kw">if</span> button <span class="hl-kw">is None</span>:
+            <span class="hl-kw">return</span>
+        <span class="hl-kw">if</span> button.group != <span class="hl-str">"BigRedButton"</span>:
+            <span class="hl-kw">return</span>
+        <span class="hl-kw">if</span> self.current_command == <span class="hl-str">"press"</span>:
+            self.last_status = CommandStatus.PASSED</code></pre>
+
+    <p>Because button presses set <code>self.last_status</code> directly, <code>check_command</code> doesn't need overriding — the inherited version returns <code>self.last_status</code> as-is.</p>
+
+    <div class="callout">
+        <strong>Sensor-based commands</strong> (like GPS or shake) can't rely on <code>on_button_down</code>. Override <code>check_command</code> instead and read your hardware there. It's called on every poll (~1 s), so keep it fast — avoid blocking I/O.
+    </div>
+
+    <h3>Dynamic command lists</h3>
+    <p>Override <code>get_capabilities</code> if your available commands depend on hardware state. Two real examples:</p>
+    <ul>
+        <li><strong>MegaDrive</strong> — expands from 8 to 12 commands when a 6-button pad is detected. It updates <code>self.COMMAND_OPTIONS</code> on the instance and the base <code>get_capabilities</code> picks it up automatically.</li>
+        <li><strong>GPS</strong> — reports no commands until it has a GPS fix, then advertises <code>move 5m away</code>. It also drains the UART buffer inside <code>get_capabilities</code> so it keeps acquiring a fix in the background even before any command is assigned.</li>
+    </ul>
+    <p>The updated list is sent to the server on the next poll so it can start (or stop) issuing those commands.</p>
+
+    <h2>Existing modules</h2>
+    <p>Three modules ship with the game. These are the best reference when writing your own.</p>
+    <div class="existing-grid">
+        <div class="existing-card">
+            <strong>Tildagon 2024</strong>
+            <div class="file-path">app/hexpansion/Tildagon2024.py</div>
+            <p>The badge itself — always connected. Buttons a–f plus shake. Drops shake from its capabilities when any hexpansion is plugged in to avoid accidental triggers. Overrides <code>set_command</code> to initialise the accelerometer baseline when a shake command is issued.</p>
+        </div>
+        <div class="existing-card">
+            <strong>MegaDrive</strong>
+            <div class="file-path">app/hexpansion/MegaDrive.py</div>
+            <p>Sega controller hexpansion. Starts with 8 commands (3-button pad). Upgrades to 12 commands when a 6-button pad is detected via a button press — updates <code>self.COMMAND_OPTIONS</code> on the instance so the base <code>get_capabilities</code> picks it up automatically.</p>
+        </div>
+        <div class="existing-card">
+            <strong>GPS</strong>
+            <div class="file-path">app/hexpansion/GPS.py</div>
+            <p>GPS hexpansion with one command: <em>move 5m away</em>. Reports no commands until it has a UART fix. Overrides <code>get_capabilities</code> to drain the UART buffer in the background, and <code>set_command</code> to snapshot the starting position.</p>
+        </div>
+    </div>
+
+    <h2>Registering your module</h2>
+    <ol class="step-list">
+        <li>
+            <span class="step-n">1</span>
+            <span>Save your class as <code>app/hexpansion/MyHexpansion.py</code>.</span>
+        </li>
+        <li>
+            <span class="step-n">2</span>
+            <span>Open <code>app/hexpansion/__init__.py</code> and add your import and class to <code>MODULE_TYPES</code>:</span>
+        </li>
+    </ol>
+    <pre><code><span class="hl-kw">from</span> .MyHexpansion <span class="hl-kw">import</span> MyHexpansionModule
+
+MODULE_TYPES = [
+    Tildagon2024Module,
+    MegaDriveModule,
+    GPSModule,
+    MyHexpansionModule,  <span class="hl-cmt"># add here</span>
+]</code></pre>
+
+    <div class="callout callout-warn">
+        <strong>FRIENDLY_NAME must exactly match the EEPROM.</strong> The name comes from the Hexpansion's firmware manifest — check the <code>hexpansion-firmwares</code> repo or run <code>scripts/generate_hexpansion_names.py</code> to regenerate the lookup table after adding new firmwares.
+    </div>
+
+    <h2>Testing on hardware</h2>
+    <p>Copy the app to the badge and reset it:</p>
+    <pre><code>pipx run mpremote cp -r app/* :/apps/spaceteam/ && pipx run mpremote reset</code></pre>
+    <p>Then, with your Hexpansion plugged in:</p>
+    <ol>
+        <li>Open the Tildateam app on the badge.</li>
+        <li>From the main menu, select <strong>Test modules</strong>.</li>
+        <li>The badge steps through every command for every detected Hexpansion, one at a time — the module name and command are shown on screen.</li>
+        <li>Perform the action. The badge detects it and advances automatically.</li>
+        <li>To skip a command, hold Cancel for 2 seconds.</li>
+        <li>At the end, a summary shows how many passed and how many were skipped.</li>
+    </ol>
+    <p>If your Hexpansion doesn't appear, it likely wasn't detected — double-check that <code>FRIENDLY_NAME</code> matches the EEPROM exactly and that <code>is_connected</code> returns <code>True</code> for it.</p>
+
+</div>
+</body>
+</html>

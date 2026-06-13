@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tildateam</title>
+    <style>
+        :root {
+            --bg: #f4efe3;
+            --panel: #fff9ec;
+            --line: #d7c9aa;
+            --text: #2c2314;
+            --accent: #0f766e;
+            --accent-2: #b45309;
+            --ok: #166534;
+            --bad: #991b1b;
+            --gold: #b45309;
+            --silver: #64748b;
+            --bronze: #92400e;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--text);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background: var(--bg);
+        }
+
+        /* ── Nav ── */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(244, 239, 227, 0.92);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            height: 52px;
+        }
+        .nav-brand {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: 0.02em;
+            text-decoration: none;
+            color: var(--text);
+        }
+        .nav-links { display: flex; gap: 2px; }
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text);
+            font-size: 14px;
+            padding: 6px 11px;
+            border-radius: 8px;
+            opacity: 0.7;
+            transition: opacity 0.12s, background 0.12s;
+        }
+        .nav-links a:hover { opacity: 1; background: rgba(44, 35, 20, 0.06); }
+
+        /* ── Sections ── */
+        .section-wrap {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 52px 24px 48px;
+        }
+        .section-wrap + .section-wrap {
+            border-top: 1px solid var(--line);
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+        .section-header h2 {
+            margin: 0;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 26px;
+            font-weight: 700;
+        }
+        .section-sub { opacity: 0.6; font-size: 14px; }
+
+        /* ── About / hero ── */
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 36px;
+            align-items: start;
+        }
+        .hero-text h1 {
+            margin: 0 0 14px;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 44px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            line-height: 1.08;
+        }
+        .hero-text .tagline {
+            font-size: 16px;
+            line-height: 1.65;
+            opacity: 0.75;
+            margin: 0;
+        }
+        .how-to-play {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 20px 22px;
+        }
+        .how-to-play h3 {
+            margin: 0 0 12px;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        .steps { list-style: none; padding: 0; margin: 0; }
+        .steps li {
+            display: flex;
+            gap: 11px;
+            align-items: flex-start;
+            padding: 9px 0;
+            font-size: 13.5px;
+            line-height: 1.5;
+            border-bottom: 1px solid var(--line);
+        }
+        .steps li:last-child { border-bottom: none; padding-bottom: 0; }
+        .step-num {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 2px;
+        }
+
+        /* ── Hexpansions section ── */
+        .hexp-intro {
+            font-size: 15px;
+            line-height: 1.6;
+            opacity: 0.8;
+            margin: 0 0 24px;
+        }
+        .hexp-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .hexp-card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(44, 35, 20, 0.05);
+        }
+        .hexp-card h3 {
+            margin: 0 0 6px;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        .hexp-tag {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 9px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            margin-bottom: 12px;
+        }
+        .hexp-builtin { background: rgba(15, 118, 110, 0.12); color: var(--accent); }
+        .hexp-plugin  { background: rgba(180, 83, 9, 0.1); color: var(--accent-2); }
+        .hexp-soon    { background: rgba(100, 116, 139, 0.12); color: var(--silver); }
+        .hexp-card-soon { border-style: dashed; opacity: 0.7; }
+        .hexp-desc { font-size: 13.5px; line-height: 1.55; margin: 0 0 12px; opacity: 0.8; }
+        .cmd-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+        .cmd-chip {
+            background: rgba(15, 118, 110, 0.08);
+            border: 1px solid rgba(15, 118, 110, 0.2);
+            border-radius: 6px;
+            padding: 3px 9px;
+            font-size: 12px;
+            font-family: "IBM Plex Mono", monospace;
+            color: var(--accent);
+        }
+        .cmd-chip-dim { opacity: 0.4; }
+        .hexp-note { font-size: 11px; opacity: 0.5; margin-top: 7px; font-style: italic; }
+
+        /* ── Live status ── */
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--ok);
+            flex-shrink: 0;
+            animation: blink 2.2s ease-in-out infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .rooms-grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(auto-fill, minmax(190px, 260px));
+        }
+        .no-rooms {
+            grid-column: 1 / -1;
+            padding: 40px 0;
+            text-align: center;
+            opacity: 0.5;
+            font-size: 15px;
+        }
+        .no-rooms-icon { font-size: 32px; margin-bottom: 8px; }
+        .room-card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 4px 10px rgba(44, 35, 20, 0.05);
+        }
+        .room-card h3 {
+            margin: 0 0 8px;
+            font-size: 17px;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        }
+        .room-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 3px;
+        }
+        .state-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .state-waiting  { background: #fef3c7; color: #92400e; }
+        .state-in-round { background: #dcfce7; color: #166534; }
+        .state-finished { background: #e0e7ff; color: #3730a3; }
+
+        /* ── Leaderboard ── */
+        .info-btn {
+            background: none;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--accent);
+        }
+        .info-btn:hover { background: rgba(15, 118, 110, 0.08); }
+        .info-panel {
+            display: none;
+            margin-bottom: 18px;
+            padding: 12px 16px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 500px;
+        }
+        .info-panel.open { display: block; }
+        .info-panel p { margin: 0 0 6px; }
+        .info-panel p:last-child { margin: 0; }
+        .formula {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 12px;
+            background: rgba(15, 118, 110, 0.07);
+            border-radius: 6px;
+            padding: 6px 10px;
+            margin: 8px 0;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        thead tr { border-bottom: 2px solid var(--line); }
+        th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            opacity: 0.6;
+        }
+        th.right { text-align: right; }
+        tbody tr { border-bottom: 1px solid var(--line); transition: background 0.15s; }
+        tbody tr:hover { background: rgba(180, 83, 9, 0.04); }
+        td { padding: 10px 12px; font-size: 15px; vertical-align: middle; }
+        td.right { text-align: right; }
+        .rank {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+            width: 44px;
+            text-align: center;
+        }
+        .rank-1 { color: var(--gold); }
+        .rank-2 { color: var(--silver); }
+        .rank-3 { color: var(--bronze); }
+        .score {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--accent);
+        }
+        .score-top { color: var(--gold); }
+        .pass { color: var(--ok); font-weight: 600; }
+        .fail { color: var(--bad); font-weight: 600; }
+        .muted { opacity: 0.55; font-size: 13px; }
+        .badge-row { display: flex; align-items: center; gap: 5px; margin: 2px 0; font-size: 13px; }
+        .badge-name { font-size: 13px; font-weight: 600; }
+        .badge-mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; opacity: 0.55; }
+        .module-tag {
+            display: inline-block;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 1px 7px;
+            margin: 1px 2px 1px 0;
+            font-size: 11px;
+            color: var(--accent);
+            background: rgba(15, 118, 110, 0.08);
+        }
+        .ts { font-size: 12px; opacity: 0.6; white-space: nowrap; }
+        .empty { text-align: center; padding: 40px 0; opacity: 0.5; font-size: 15px; }
+        @keyframes flash-in {
+            0%   { background: rgba(15, 118, 110, 0.15); }
+            100% { background: transparent; }
+        }
+        .new-entry { animation: flash-in 1.2s ease; }
+
+        /* ── Stats placeholder ── */
+        .coming-soon {
+            background: var(--panel);
+            border: 1px dashed var(--line);
+            border-radius: 14px;
+            padding: 48px 24px;
+            text-align: center;
+            opacity: 0.55;
+        }
+        .coming-soon-icon { font-size: 32px; margin-bottom: 10px; }
+
+        /* ── Footer ── */
+        .page-footer {
+            border-top: 1px solid var(--line);
+            padding: 14px 24px;
+            font-size: 12px;
+            opacity: 0.45;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 620px) {
+            .about-grid { grid-template-columns: 1fr; }
+            .hero-text h1 { font-size: 34px; }
+            .nav-links a { padding: 6px 8px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="nav-brand" href="#about">Tildateam</a>
+    <div class="nav-links">
+        <a href="#about">About</a>
+        <a href="#hexpansions">Hexpansions</a>
+        <a href="#status">Status</a>
+        <a href="#leaderboard">Leaderboard</a>
+        <a href="#stats">Stats</a>
+    </div>
+</nav>
+
+<!-- ── About ── -->
+<div class="section-wrap" id="about">
+    <div class="about-grid">
+        <div class="hero-text">
+            <h1>SpaceTeam<br>for Tildagon</h1>
+            <p class="tagline">A cooperative game for 2-6 players, played on the Tildagon (and hexpansions). Each badge shows commands meant for someone else. Calmly and clearly tell your teammates what to do, and successfully carry out as many commands as you can before time runs out.</p>
+        </div>
+        <div class="how-to-play">
+            <h3>How to play</h3>
+            <ol class="steps">
+                <li>
+                    <span class="step-num">1</span>
+                    <span>One player creates a room from their badge. Everyone else joins by selecting the same room number.</span>
+                </li>
+                <li>
+                    <span class="step-num">2</span>
+                    <span>Each badge gets a different colour.</span>
+                </li>
+                <li>
+                    <span class="step-num">3</span>
+                    <span>Your badge shows commands for <em>other</em> colours: "Green: press Button A". Shout it at the right player.</span>
+                </li>
+                <li>
+                    <span class="step-num">4</span>
+                    <span>Carry out the command you're told to by a teammate. Complete it and your teammate gets a new command.</span>
+                </li>
+                <li>
+                    <span class="step-num">5</span>
+                    <span>Pass as many commands as possible before the 2-minute timer hits zero. More players and Hexpansions mean a higher score multiplier.</span>
+                </li>
+            </ol>
+        </div>
+    </div>
+</div>
+
+<!-- ── Hexpansions ── -->
+<div class="section-wrap" id="hexpansions">
+    <div class="section-header">
+        <h2>Commands and Hexpansions</h2>
+    </div>
+    <p class="hexp-intro">Supported hexpansions plugged in to badges playing bring more variety of commands to the game - and the more you have, the bigger your score multiplier.</p>
+    <div class="hexp-grid">
+        <div class="hexp-card">
+            <h3>🔷 Tildagon 2024</h3>
+            <div class="hexp-tag hexp-builtin">Badge</div>
+            <p class="hexp-desc">The trusty old 2024 Tildagon. Press any of the six buttons around the edge, or shake the whole badge (NB if any hexpansions are plugged in, 'Shake' is disabled. There was... an incident during testing).</p>
+            <div class="cmd-chips">
+                <span class="cmd-chip">a</span>
+                <span class="cmd-chip">b</span>
+                <span class="cmd-chip">c</span>
+                <span class="cmd-chip">d</span>
+                <span class="cmd-chip">e</span>
+                <span class="cmd-chip">f</span>
+                <span class="cmd-chip">shake</span>
+            </div>
+        </div>
+        <div class="hexp-card">
+            <h3>🕹️ MegaDrive</h3>
+            <div class="hexp-tag hexp-plugin">Hexpansion</div>
+            <p class="hexp-desc">A <a href="https://hughrawlinson.github.io/hexpansion-registry/#megadrive-controller" target="_blank" rel="noopener">Sega MegaDrive controller hexpansion</a>. 3-button pads give you Start, A, B, C - 6-button pads auto-unlock four more if one of the additional buttons is pressed.</p>
+            <div class="cmd-chips">
+                <span class="cmd-chip">start</span>
+                <span class="cmd-chip">a</span>
+                <span class="cmd-chip">b</span>
+                <span class="cmd-chip">c</span>
+                <span class="cmd-chip cmd-chip-dim">x</span>
+                <span class="cmd-chip cmd-chip-dim">y</span>
+                <span class="cmd-chip cmd-chip-dim">z</span>
+                <span class="cmd-chip cmd-chip-dim">mode</span>
+            </div>
+            <div class="hexp-note">x · y · z · mode auto-unlock on 6-button pads</div>
+        </div>
+        <div class="hexp-card">
+            <h3>📡 GPS</h3>
+            <div class="hexp-tag hexp-plugin">Hexpansion</div>
+            <p class="hexp-desc">The <a href="https://themachineshop.uk/products/gps-hexpansion" target="_blank" rel="noopener">GPS Hexpansion</a> only has one command. But when it comes up, I'd start running.</p>
+            <div class="cmd-chips">
+                <span class="cmd-chip">move 5m away</span>
+            </div>
+        </div>
+    </div>
+    <div class="hexp-grid" style="margin-top: 12px;">
+        <div class="hexp-card hexp-card-soon">
+            <h3>🚀 Tildagon 2026</h3>
+            <div class="hexp-tag hexp-soon">Coming soon</div>
+            <p class="hexp-desc">The <a href="https://blog.emfcamp.org/2026/05/28/tildagon-2026-spaceagon/" target="_blank" rel="noopener">2026 EMF badge</a>, with a space theme and new hardware. Support coming (hopefully) in the field.</p>
+        </div>
+        <div class="hexp-card hexp-card-soon">
+            <h3>⌨️ Keebdeck</h3>
+            <div class="hexp-tag hexp-soon">Coming soon</div>
+            <p class="hexp-desc">The official <a href="https://blog.emfcamp.org/2026/05/28/tildagon-2026-spaceagon/"target="_blank" rel="noopener">keyboard hexpansion</a> for the Tildagon. Just type the word you're told in on the keyboard. I'm sure they won't be confusing. Support coming (hopefully) in the field.</p>
+        </div>
+        <div class="hexp-card hexp-card-soon">
+            <h3>🔌 Your Hexpansion?</h3>
+            <div class="hexp-tag hexp-soon">Coming soon</div>
+            <p class="hexp-desc">I've tried very hard to make it easy to add support for new hexpansions. <a href="/hexpansions">Give it a shot!</a></p>
+        </div>
+    </div>
+</div>
+
+<!-- ── Status ── -->
+<div class="section-wrap" id="status">
+    <div class="section-header">
+        <h2>Live status</h2>
+        <div class="live-dot"></div>
+        <span class="section-sub" id="status-sub"></span>
+    </div>
+    <div class="rooms-grid" id="rooms">
+        <div class="no-rooms" id="no-rooms">
+            <div class="no-rooms-icon">🚀</div>
+            <div>No rooms open right now</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Leaderboard ── -->
+<div class="section-wrap" id="leaderboard">
+    <div class="section-header">
+        <h2>Leaderboard</h2>
+        <span class="section-sub">
+            Top scores &nbsp;
+            <button class="info-btn" onclick="document.getElementById('score-info').classList.toggle('open')">how scores work</button>
+        </span>
+    </div>
+    <div class="info-panel" id="score-info">
+        <p>Score rewards passing commands, bigger teams, and more Hexpansions:</p>
+        <div class="formula">score = commands_passed × √(badges) × avg_hexpansions_per_badge</div>
+        <p>A larger team multiplies your score more than a solo player, and having more Hexpansions attached gives a further boost.</p>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Score</th>
+                <th>Team</th>
+                <th class="right">Passed</th>
+                <th class="right">Failed</th>
+                <th>Hexpansions</th>
+                <th>When</th>
+            </tr>
+        </thead>
+        <tbody id="lb-rows">
+            <tr><td colspan="7" class="empty">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ── Stats ── -->
+<div class="section-wrap" id="stats">
+    <div class="section-header">
+        <h2>Stats</h2>
+    </div>
+    <div class="coming-soon">
+        <div class="coming-soon-icon">📊</div>
+        <div>Lifetime stats coming soon</div>
+    </div>
+</div>
+
+<div class="page-footer" id="page-footer">Tildateam @ EMF Camp</div>
+
+<script>
+    function esc(v) {
+        return String(v)
+            .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+    }
+
+    // ── Live status ──────────────────────────────────────────────
+
+    const roomsEl = document.getElementById("rooms");
+    const noRoomsEl = document.getElementById("no-rooms");
+    const statusSubEl = document.getElementById("status-sub");
+    const roomNodes = new Map();
+
+    function roomCard(room) {
+        const state = room.room_state || "waiting";
+        const label = { waiting: "Waiting", "in-round": "In Round", finished: "Finished" }[state] || state;
+        const cls = { waiting: "state-waiting", "in-round": "state-in-round", finished: "state-finished" }[state] || "";
+        return `<div class="room-card">
+            <h3>Room ${room.room_id} <span class="state-badge ${cls}">${label}</span></h3>
+            <div class="room-row"><span>Badges connected</span><strong>${room.badge_count}</strong></div>
+        </div>`;
+    }
+
+    async function refreshStatus() {
+        try {
+            const data = await fetch('/api/rooms').then(r => r.json());
+            const rooms = data.rooms || [];
+            const seen = new Set();
+            for (const room of rooms) {
+                const key = String(room.room_id);
+                seen.add(key);
+                const existing = roomNodes.get(key);
+                if (!existing) {
+                    const d = document.createElement("div");
+                    d.innerHTML = roomCard(room).trim();
+                    const node = d.firstElementChild;
+                    roomNodes.set(key, node);
+                    roomsEl.appendChild(node);
+                } else {
+                    const d = document.createElement("div");
+                    d.innerHTML = roomCard(room).trim();
+                    existing.innerHTML = d.firstElementChild.innerHTML;
+                }
+            }
+            for (const [key, node] of roomNodes.entries()) {
+                if (!seen.has(key)) { node.remove(); roomNodes.delete(key); }
+            }
+            noRoomsEl.style.display = roomNodes.size === 0 ? "" : "none";
+            statusSubEl.textContent = rooms.length
+                ? `${rooms.length} room${rooms.length !== 1 ? "s" : ""} open`
+                : "No active rooms";
+        } catch {}
+    }
+
+    // ── Leaderboard ──────────────────────────────────────────────
+
+    const tbody = document.getElementById("lb-rows");
+    let prevKeys = new Set();
+
+    function relTime(iso) {
+        const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+        if (m < 1) return "just now";
+        if (m < 60) return `${m}m ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return `${h}h ago`;
+        return `${Math.floor(h / 24)}d ago`;
+    }
+
+    function playerLabel(id, usernames) {
+        const name = usernames?.[id];
+        if (name) return `<span class="badge-name">${esc(name)}</span>`;
+        return `<span class="badge-mono">${id.length > 6 ? "…" + id.slice(-4) : esc(id)}</span>`;
+    }
+
+    function teamHtml(entry, usernames) {
+        if (entry.badges) {
+            const names = Object.keys(entry.badges).map(id => usernames?.[id]).filter(Boolean);
+            if (names.length) return names.map(esc).join(", ");
+        }
+        return `${entry.num_badges} badge${entry.num_badges !== 1 ? "s" : ""}`;
+    }
+
+    function modulesHtml(entry, usernames) {
+        if (!entry.badges || !Object.keys(entry.badges).length)
+            return `<span class="muted">${entry.num_badges} badge${entry.num_badges !== 1 ? "s" : ""}</span>`;
+        return Object.entries(entry.badges).map(([id, mods]) =>
+            `<div class="badge-row">${playerLabel(id, usernames)}${mods.map(m => `<span class="module-tag">${esc(m)}</span>`).join("")}</div>`
+        ).join("");
+    }
+
+    function renderLeaderboard(entries, usernames) {
+        const top = entries.filter(e => e.score > 0).slice(0, 15);
+        if (!top.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No scores yet — play a round!</td></tr>';
+            prevKeys = new Set();
+            return;
+        }
+        const newKeys = new Set(top.map(e => e.timestamp + "|" + e.score));
+        tbody.innerHTML = top.map((e, i) => {
+            const rank = i + 1;
+            const key = e.timestamp + "|" + e.score;
+            const isNew = !prevKeys.has(key) && prevKeys.size > 0;
+            return `<tr${isNew ? ' class="new-entry"' : ''} data-ts="${esc(e.timestamp)}">
+                <td class="rank ${rank <= 3 ? `rank-${rank}` : ""}">${rank}</td>
+                <td class="${rank === 1 ? "score score-top" : "score"}">${e.score.toFixed(2)}</td>
+                <td>${teamHtml(e, usernames)}</td>
+                <td class="right pass">${e.commands_passed}</td>
+                <td class="right fail">${e.commands_failed}</td>
+                <td>${modulesHtml(e, usernames)}</td>
+                <td class="ts">${relTime(e.timestamp)}</td>
+            </tr>`;
+        }).join("");
+        prevKeys = newKeys;
+    }
+
+    async function refreshLeaderboard() {
+        try {
+            const data = await fetch('/api/leaderboard').then(r => r.json());
+            renderLeaderboard(data.leaderboard || [], data.usernames || {});
+        } catch {}
+    }
+
+    setInterval(() => {
+        tbody.querySelectorAll("tr[data-ts]").forEach(tr => {
+            const td = tr.querySelector("td.ts");
+            if (td) td.textContent = relTime(tr.dataset.ts);
+        });
+    }, 30000);
+
+    refreshStatus();
+    refreshLeaderboard();
+    setInterval(refreshStatus, 10000);
+    setInterval(refreshLeaderboard, 10000);
+</script>
+</body>
+</html>
