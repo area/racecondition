@@ -9,7 +9,7 @@ import imu
 
 class Tildagon2024Module(HexpansionModule):
     FRIENDLY_NAME = "Tildagon 2024"
-    COMMAND_OPTIONS = ["a", "b", "c", "d", "e", "f", "shake"]
+    COMMAND_OPTIONS = ["flip", "a", "b", "c", "d", "e", "f", "shake"]
 
     def __init__(self):
         self._has_hexpansions = False
@@ -19,6 +19,7 @@ class Tildagon2024Module(HexpansionModule):
         super().reset()
         self._shake_started_ms = None
         self._last_accel = None
+        self._flip_baseline = None
 
     def is_connected(self, hexpansions):
         self._has_hexpansions = any(v["known"] for v in hexpansions.values())
@@ -26,7 +27,7 @@ class Tildagon2024Module(HexpansionModule):
 
     def _safe_commands(self):
         if self._has_hexpansions:
-            return [c for c in self.COMMAND_OPTIONS if c != "shake"]
+            return [c for c in self.COMMAND_OPTIONS if c not in ("shake", "flip")]
         return list(self.COMMAND_OPTIONS)
 
     def get_capabilities(self):
@@ -41,12 +42,14 @@ class Tildagon2024Module(HexpansionModule):
         return result
 
     def _setup_command(self, command):
+        self._shake_started_ms = None
+        self._last_accel = None
+        self._flip_baseline = None
         if command == "shake":
             self._shake_started_ms = time.ticks_ms()
             self._last_accel = self._read_accel_xyz()
-        else:
-            self._shake_started_ms = None
-            self._last_accel = None
+        elif command == "flip":
+            self._flip_baseline = self._read_accel_xyz()
 
     def on_button_down(self, event):
         button_name = self._get_button_name(event)
@@ -61,6 +64,8 @@ class Tildagon2024Module(HexpansionModule):
     def check_command(self):
         if self.current_command == "shake":
             return self._check_shake()
+        if self.current_command == "flip":
+            return self._check_flip()
         return self.last_status
 
     def _check_shake(self):
@@ -79,6 +84,20 @@ class Tildagon2024Module(HexpansionModule):
         print("[Tildagon] Shake delta: {:.2f}".format(delta))
         if delta > 15:  # empirically determined threshold
             print("[Tildagon] Shake command PASSED - delta {:.2f}".format(delta))
+            return CommandStatus.PASSED
+        return CommandStatus.WAITING
+
+    def _check_flip(self):
+        if self._flip_baseline is None:
+            return CommandStatus.WAITING
+        bx, by, bz = self._flip_baseline
+        ax, ay, az = self._read_accel_xyz()
+        dot = ax * bx + ay * by + az * bz
+        mag_a = math.sqrt(ax ** 2 + ay ** 2 + az ** 2)
+        mag_b = math.sqrt(bx ** 2 + by ** 2 + bz ** 2)
+        if mag_a == 0 or mag_b == 0:
+            return CommandStatus.WAITING
+        if dot / (mag_a * mag_b) < -0.9:
             return CommandStatus.PASSED
         return CommandStatus.WAITING
 

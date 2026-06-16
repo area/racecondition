@@ -70,6 +70,7 @@ class TildateamApp(app.App):
 		self._qr_active = False
 		self._qr_matrix = None
 		self._caps_dirty = True
+		self._last_sent_caps = None
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -255,6 +256,7 @@ class TildateamApp(app.App):
 		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
 		self._caps_dirty = True
+		self._last_sent_caps = None
 		if self.room_client.available():
 			data, error = self.room_client.join_room(
 				self.session.room_id,
@@ -379,7 +381,11 @@ class TildateamApp(app.App):
 				self._network_error_shown = True
 			return
 
-		caps = self._capabilities() if self._caps_dirty else None
+		current_caps = self._capabilities()
+		if self._caps_dirty or current_caps != self._last_sent_caps:
+			caps = current_caps
+		else:
+			caps = None
 		data, error = self.room_client.poll(
 			self.session.room_id,
 			self.badge_id,
@@ -395,6 +401,7 @@ class TildateamApp(app.App):
 
 		if caps is not None:
 			self._caps_dirty = False
+			self._last_sent_caps = caps
 		if data.get("need_capabilities"):
 			self._caps_dirty = True
 
