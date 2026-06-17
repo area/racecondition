@@ -9,7 +9,7 @@ _scripts_dir = str(Path(__file__).parent)
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 
-from leaderboard import SqliteLeaderboard, InMemoryLeaderboard
+from leaderboard import SqliteLeaderboard
 
 _ENTRY_A = {
     "timestamp": "2026-06-16T10:00:00+00:00",
@@ -116,21 +116,6 @@ class TestSqliteLeaderboardStats(unittest.TestCase):
         self.assertEqual(result["total_games"], 1)
         self.assertEqual(result["module_stats"], {})
 
-
-class TestInMemoryLeaderboardStats(unittest.TestCase):
-    def test_stats_empty(self):
-        lb = InMemoryLeaderboard()
-        self.assertEqual(lb.stats()["total_games"], 0)
-
-    def test_stats_aggregates_modules(self):
-        lb = InMemoryLeaderboard()
-        lb.record(_ENTRY_A)
-        lb.record(_ENTRY_B)
-        result = lb.stats()
-        self.assertEqual(result["total_games"], 2)
-        gps = result["module_stats"]["GPS"]
-        self.assertEqual(gps["passed"], 8)
-        self.assertEqual(gps["failed"], 8)
 
 
 if __name__ == "__main__":

@@ -16,13 +16,13 @@ Room = _room_mod.Room
 ROUND_DURATION_S = _room_mod.ROUND_DURATION_S
 COLOURS = _room_mod.COLOURS
 
-from leaderboard import InMemoryLeaderboard
+from leaderboard import SqliteLeaderboard
 
 GPS_CAPS = [{"module": "GPS", "commands": ["move 5m away"]}]
 
 
 def _room(room_id=1):
-    return Room(room_id, leaderboard=InMemoryLeaderboard())
+    return Room(room_id, leaderboard=SqliteLeaderboard(":memory:"))
 
 
 class TestJoin(unittest.TestCase):
@@ -116,6 +116,27 @@ class TestInstructionSelection(unittest.TestCase):
         data = room.poll("solo", GPS_CAPS)
         self.assertIsNotNone(data["display"])
 
+    def test_instruction_stable_across_polls_with_three_badges(self):
+        room = _room(3)
+        room.join("badge-a", GPS_CAPS)
+        room.join("badge-b", GPS_CAPS)
+        room.join("badge-c", GPS_CAPS)
+        room.start_round("badge-a")
+        room.start_round("badge-b")
+        room.start_round("badge-c")
+        room.poll("badge-a", GPS_CAPS)
+        room.poll("badge-b", GPS_CAPS)
+        room.poll("badge-c", GPS_CAPS)
+        first = room.poll("badge-a", GPS_CAPS)["display"]
+        if first is None:
+            self.skipTest("no display")
+        first_colour = first["target_colour"]
+        self.assertIsNotNone(first_colour)
+        for _ in range(20):
+            display = room.poll("badge-a", GPS_CAPS)["display"]
+            if display is not None:
+                self.assertEqual(display["target_colour"], first_colour)
+
 
 class TestScoring(unittest.TestCase):
     def _setup_with_assignment(self, room_id=1):
@@ -199,7 +220,7 @@ class TestScoring(unittest.TestCase):
         self.assertEqual(room._module_scores.get("GPS", {}).get("failed"), 1)
 
     def test_module_scores_and_badge_scores_in_leaderboard_entry(self):
-        lb = InMemoryLeaderboard()
+        lb = SqliteLeaderboard(":memory:")
         room = Room(10, leaderboard=lb)
         token = room.join("badge-a", GPS_CAPS)["session_token"]
         room.start_round("badge-a")

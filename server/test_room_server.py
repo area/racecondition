@@ -30,11 +30,11 @@ _room_module = importlib.util.module_from_spec(_room_spec)
 _room_spec.loader.exec_module(_room_module)
 Room = _room_module.Room
 
-from leaderboard import InMemoryLeaderboard
+from leaderboard import SqliteLeaderboard
 
 
 def _make_room(room_id):
-    return Room(room_id, leaderboard=InMemoryLeaderboard())
+    return Room(room_id, leaderboard=SqliteLeaderboard(":memory:"))
 
 TEST_HOST = "127.0.0.1"
 TEST_PORT = 18000

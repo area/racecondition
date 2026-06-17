@@ -74,6 +74,7 @@ class Room:
             self._badge_scores.pop(badge_id, None)
             self._session_tokens.pop(badge_id, None)
             self._last_sent_players_gen.pop(badge_id, None)
+            self._pinned_display.pop(badge_id, None)
             self._ready.discard(badge_id)
             if not self._badges:
                 self._reset_state()
@@ -162,6 +163,7 @@ class Room:
         self._ready = set()
         self._players_generation = 0
         self._last_sent_players_gen = {}
+        self._pinned_display = {}
 
     def _now(self):
         return time.monotonic()
@@ -174,6 +176,7 @@ class Room:
         self._module_scores = {}
         self._assignments = {}
         self._ready = set()
+        self._pinned_display = {}
 
     def _check_all_ready(self):
         if self._state == "waiting" and self._badges and not (set(self._badges.keys()) - self._ready):
@@ -189,6 +192,7 @@ class Room:
             self._badge_scores.pop(bid, None)
             self._session_tokens.pop(bid, None)
             self._last_sent_players_gen.pop(bid, None)
+            self._pinned_display.pop(bid, None)
             self._dismissed.discard(bid)
             self._ready.discard(bid)
         if not self._badges:
@@ -270,11 +274,21 @@ class Room:
 
     def _select_instruction(self, badge_id):
         now = self._now()
-        all_assignments = list(self._assignments.items())
-        if not all_assignments:
-            return None
-        other = [(tid, a) for tid, a in all_assignments if tid != badge_id]
-        target_id, assignment = random.choice(other if other else all_assignments)
+        # Reuse the pinned target if it still has an active assignment.
+        # Only pin to other badges; solo fallback (own assignment) is transient.
+        pinned = self._pinned_display.get(badge_id)
+        if pinned is not None and pinned in self._assignments:
+            target_id, assignment = pinned, self._assignments[pinned]
+        else:
+            all_assignments = list(self._assignments.items())
+            if not all_assignments:
+                return None
+            other = [(tid, a) for tid, a in all_assignments if tid != badge_id]
+            target_id, assignment = random.choice(other if other else all_assignments)
+            if target_id != badge_id:
+                self._pinned_display[badge_id] = target_id
+            else:
+                self._pinned_display.pop(badge_id, None)
         time_remaining = max(0.0, ASSIGNMENT_TIMEOUT_S - (now - assignment["issued_at"]))
         return {
             "module": assignment["module"],

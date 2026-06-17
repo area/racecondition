@@ -58,7 +58,6 @@ class TildateamApp(app.App):
 		self._secret_id = _build_secret_id()
 		self.badge_id = _derive_public_id(self._secret_id)
 		self.session = GameSession()
-		self.connected_modules = []
 		self.module_registry = ModuleRegistry()
 		self._network_error_shown = False
 		self.notification = None
@@ -240,7 +239,7 @@ class TildateamApp(app.App):
 				"name": friendly_name,
 				"known": friendly_name is not None,
 			}
-		self.connected_modules = self.module_registry.scan(hexpansions)
+		self.module_registry.scan(hexpansions)
 		self._caps_dirty = True
 		if self.session.expected_module and self.module_registry.get_by_name(self.session.expected_module.FRIENDLY_NAME) is None:
 			self.session.clear_assignment()
@@ -296,13 +295,14 @@ class TildateamApp(app.App):
 			self._poll_server(force=True)
 
 	def _start_testing(self):
-		if not self.connected_modules:
+		modules = self.module_registry.connected_modules()
+		if not modules:
 			self.notification = Notification("No modules connected")
 			return
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
-		items = [m.FRIENDLY_NAME for m in self.connected_modules] + ["Back"]
+		items = [m.FRIENDLY_NAME for m in modules] + ["Back"]
 		self.menu = Menu(
 			self,
 			items,
@@ -314,7 +314,7 @@ class TildateamApp(app.App):
 		if item == "Back":
 			self._back_to_main()
 			return
-		module = self.connected_modules[idx]
+		module = self.module_registry.connected_modules()[idx]
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
@@ -544,7 +544,7 @@ class TildateamApp(app.App):
 		ctx.move_to(0, 52).text(self.session.format_remaining())
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
-		modules = ", ".join(m.FRIENDLY_NAME for m in self.connected_modules)
+		modules = ", ".join(m.FRIENDLY_NAME for m in self.module_registry.connected_modules())
 		ctx.move_to(0, 72).text(modules or "No modules")
 
 	def _draw_testing_command(self, ctx):

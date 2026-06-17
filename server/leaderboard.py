@@ -142,36 +142,3 @@ class SqliteLeaderboard:
         }
 
 
-class InMemoryLeaderboard:
-    def __init__(self):
-        self._entries = []
-
-    def record(self, entry):
-        self._entries.append(entry)
-        self._entries.sort(key=lambda e: e["score"], reverse=True)
-
-    def entries(self):
-        return list(self._entries)
-
-    def stats(self):
-        if not self._entries:
-            return {"total_games": 0}
-        total = len(self._entries)
-        module_totals = {}
-        for e in self._entries:
-            for module, counts in e.get("module_scores", {}).items():
-                ms = module_totals.setdefault(module, {"passed": 0, "failed": 0})
-                ms["passed"] += counts.get("passed", 0)
-                ms["failed"] += counts.get("failed", 0)
-        module_stats = {}
-        for module, counts in module_totals.items():
-            t = counts["passed"] + counts["failed"]
-            module_stats[module] = {
-                **counts,
-                "success_rate": round(counts["passed"] / t, 3) if t else None,
-            }
-        return {
-            "total_games": total,
-            "avg_score": round(sum(e["score"] for e in self._entries) / total, 2),
-            "module_stats": module_stats,
-        }
