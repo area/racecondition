@@ -20,6 +20,20 @@ CREATE TABLE IF NOT EXISTS leaderboard_entries (
     badges TEXT NOT NULL,
     module_counts TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS game_module_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES leaderboard_entries(id),
+    module TEXT NOT NULL,
+    passed INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS game_badge_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES leaderboard_entries(id),
+    badge_id TEXT NOT NULL,
+    passed INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0
+);
 """
 
 

@@ -151,6 +151,167 @@
         @keyframes rise {
             to { transform: translateY(0); opacity: 1; }
         }
+
+        /* ── Games table ── */
+        .games-section {
+            padding: 0 24px 32px;
+        }
+        .games-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .games-header h2 {
+            margin: 0;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .games-count {
+            font-size: 13px;
+            opacity: 0.55;
+        }
+        .games-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .games-table thead tr {
+            border-bottom: 2px solid var(--line);
+        }
+        .games-table th {
+            text-align: left;
+            padding: 7px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            opacity: 0.55;
+        }
+        .games-table th.r { text-align: right; }
+        .games-table tbody tr.summary-row {
+            border-bottom: 1px solid var(--line);
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+        .games-table tbody tr.summary-row:hover { background: rgba(44,35,20,0.04); }
+        .games-table tbody tr.summary-row.open { background: rgba(15,118,110,0.05); }
+        .games-table td {
+            padding: 9px 10px;
+            vertical-align: middle;
+        }
+        .games-table td.r { text-align: right; }
+        .expand-icon {
+            display: inline-block;
+            width: 16px;
+            color: var(--accent);
+            font-size: 11px;
+            transition: transform 0.18s;
+        }
+        .summary-row.open .expand-icon { transform: rotate(90deg); }
+        .score-val {
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .pass-val { color: var(--ok); font-weight: 600; }
+        .fail-val { color: var(--bad); font-weight: 600; }
+        .ts-val { font-size: 12px; opacity: 0.6; white-space: nowrap; }
+        .detail-row td {
+            padding: 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .detail-inner {
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.22s ease;
+        }
+        .detail-body {
+            padding: 10px 14px 14px 30px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .badge-card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px 12px;
+            min-width: 160px;
+        }
+        .badge-card-name {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+        .mod-chip {
+            display: inline-block;
+            background: rgba(15,118,110,0.08);
+            border: 1px solid rgba(15,118,110,0.2);
+            border-radius: 5px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-family: "IBM Plex Mono", monospace;
+            color: var(--accent);
+            margin: 2px 2px 0 0;
+        }
+        .games-empty {
+            text-align: center;
+            padding: 40px 0;
+            opacity: 0.45;
+            font-size: 14px;
+        }
+        .badge-card-stats {
+            margin-top: 5px;
+            font-size: 11px;
+            display: flex;
+            gap: 8px;
+        }
+        .detail-inner.open { max-height: 900px; }
+        .mod-results {
+            padding: 4px 14px 10px 30px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            align-items: center;
+        }
+        .mod-results-label {
+            font-size: 10px;
+            opacity: 0.45;
+            margin-right: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .mod-result-chip {
+            background: rgba(44,35,20,0.04);
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 2px 8px;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 11px;
+        }
+        .pager {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .pager-info {
+            font-size: 12px;
+            opacity: 0.5;
+        }
+        .pager-btn {
+            border: 1px solid var(--line);
+            background: var(--panel);
+            border-radius: 6px;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .pager-btn:disabled { opacity: 0.3; cursor: default; }
+        .pager-btn:not(:disabled):hover { background: var(--bg); }
     </style>
 </head>
 <body>
@@ -165,6 +326,34 @@
             <p class="hint">Create a room from a badge to get started</p>
         </div>
     </main>
+    <div class="games-section">
+        <div class="games-header">
+            <h2>Games</h2>
+            <span class="games-count" id="games-count"></span>
+            <div class="pager">
+                <button class="pager-btn" id="pager-prev" disabled>&#8592; Prev</button>
+                <span class="pager-info" id="pager-info"></span>
+                <button class="pager-btn" id="pager-next" disabled>Next &#8594;</button>
+            </div>
+        </div>
+        <table class="games-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Time</th>
+                    <th>Room</th>
+                    <th class="r">Score</th>
+                    <th class="r">Badges</th>
+                    <th class="r">Passed</th>
+                    <th class="r">Failed</th>
+                    <th class="r">Hexpansions</th>
+                </tr>
+            </thead>
+            <tbody id="games-tbody">
+                <tr><td colspan="8" class="games-empty">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
     <div class="footer" id="updated">Waiting for data...</div>
 
     <script>
@@ -283,6 +472,133 @@
 
         refresh();
         setInterval(refresh, 1000);
+
+        // ── Games table ──────────────────────────────────────────
+
+        const gamesTbody = document.getElementById("games-tbody");
+        const gamesCount = document.getElementById("games-count");
+        const pagerPrev = document.getElementById("pager-prev");
+        const pagerNext = document.getElementById("pager-next");
+        const pagerInfo = document.getElementById("pager-info");
+
+        const PAGE_SIZE = 10;
+        let currentPage = 0;
+        let allEntries = [];
+        let allUsernames = {};
+        const openRows = new Set();
+
+        function relTime(iso) {
+            const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+            if (m < 1) return "just now";
+            if (m < 60) return `${m}m ago`;
+            const h = Math.floor(m / 60);
+            if (h < 24) return `${h}h ago`;
+            return `${Math.floor(h / 24)}d ago`;
+        }
+
+        function badgeCards(entry, usernames) {
+            const badges = entry.badges || {};
+            const bscores = entry.badge_scores || {};
+            return Object.entries(badges).map(([id, mods]) => {
+                const name = (usernames && usernames[id]) ? esc(usernames[id]) : `<span style="font-family:monospace;font-size:11px;opacity:.6">…${esc(id.slice(-6))}</span>`;
+                const chips = mods.map(m => `<span class="mod-chip">${esc(m)}</span>`).join("");
+                const sc = bscores[id];
+                const stats = sc != null
+                    ? `<div class="badge-card-stats"><span class="pass-val">✓ ${sc.passed}</span><span class="fail-val">✗ ${sc.failed}</span></div>`
+                    : "";
+                return `<div class="badge-card"><div class="badge-card-name">${name}</div>${chips || '<span style="opacity:.4;font-size:11px">no modules</span>'}${stats}</div>`;
+            }).join("");
+        }
+
+        function moduleResultsSection(entry) {
+            const mr = entry.module_results || {};
+            const items = Object.entries(mr);
+            if (!items.length) return "";
+            const chips = items.map(([mod, sc]) =>
+                `<span class="mod-result-chip">${esc(mod)}&ensp;<span class="pass-val">✓${sc.passed}</span>&nbsp;<span class="fail-val">✗${sc.failed}</span></span>`
+            ).join("");
+            return `<div class="mod-results"><span class="mod-results-label">by module:</span>${chips}</div>`;
+        }
+
+        function renderPage() {
+            if (!allEntries.length) {
+                gamesTbody.innerHTML = '<tr><td colspan="8" class="games-empty">No games yet</td></tr>';
+                gamesCount.textContent = "";
+                pagerInfo.textContent = "";
+                pagerPrev.disabled = true;
+                pagerNext.disabled = true;
+                return;
+            }
+
+            const total = allEntries.length;
+            const totalPages = Math.ceil(total / PAGE_SIZE);
+            currentPage = Math.max(0, Math.min(currentPage, totalPages - 1));
+            const start = currentPage * PAGE_SIZE;
+            const end = Math.min(start + PAGE_SIZE, total);
+            const page = allEntries.slice(start, end);
+
+            gamesCount.textContent = `${total} game${total !== 1 ? "s" : ""}`;
+            pagerInfo.textContent = totalPages > 1 ? `${start + 1}–${end} of ${total}` : "";
+            pagerPrev.disabled = currentPage === 0;
+            pagerNext.disabled = currentPage >= totalPages - 1;
+
+            const rows = page.map((e, i) => {
+                const id = `game-${start + i}`;
+                return `
+                    <tr class="summary-row" data-detail="${id}" data-idx="${start + i}">
+                        <td><span class="expand-icon">▶</span></td>
+                        <td><span class="ts-val" data-ts="${esc(e.timestamp)}">${relTime(e.timestamp)}</span></td>
+                        <td>${e.room_id}</td>
+                        <td class="r score-val">${e.score.toFixed(2)}</td>
+                        <td class="r">${e.num_badges}</td>
+                        <td class="r pass-val">${e.commands_passed}</td>
+                        <td class="r fail-val">${e.commands_failed}</td>
+                        <td class="r">${e.total_modules}</td>
+                    </tr>
+                    <tr class="detail-row">
+                        <td colspan="8"><div class="detail-inner" id="${id}">
+                            <div class="detail-body">${badgeCards(e, allUsernames)}</div>
+                            ${moduleResultsSection(e)}
+                        </div></td>
+                    </tr>`;
+            }).join("");
+            gamesTbody.innerHTML = rows;
+
+            gamesTbody.querySelectorAll(".summary-row").forEach(row => {
+                const idx = Number(row.dataset.idx);
+                if (openRows.has(idx)) {
+                    row.classList.add("open");
+                    document.getElementById(row.dataset.detail).classList.add("open");
+                }
+                row.addEventListener("click", () => {
+                    const inner = document.getElementById(row.dataset.detail);
+                    const isOpen = inner.classList.contains("open");
+                    inner.classList.toggle("open", !isOpen);
+                    row.classList.toggle("open", !isOpen);
+                    if (isOpen) openRows.delete(idx); else openRows.add(idx);
+                });
+            });
+        }
+
+        pagerPrev.addEventListener("click", () => { currentPage--; renderPage(); });
+        pagerNext.addEventListener("click", () => { currentPage++; renderPage(); });
+
+        async function refreshGames() {
+            try {
+                const data = await fetch("/api/leaderboard").then(r => r.json());
+                allEntries = data.leaderboard || [];
+                allUsernames = data.usernames || {};
+                renderPage();
+            } catch {}
+        }
+
+        refreshGames();
+        setInterval(refreshGames, 15000);
+        setInterval(() => {
+            gamesTbody.querySelectorAll(".ts-val[data-ts]").forEach(el => {
+                el.textContent = relTime(el.dataset.ts);
+            });
+        }, 30000);
     </script>
 </body>
 </html>

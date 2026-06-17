@@ -11,7 +11,7 @@ class SqliteLeaderboard:
 
     def record(self, entry):
         with self._lock:
-            self._conn.execute(
+            cur = self._conn.execute(
                 """INSERT INTO leaderboard_entries
                    (timestamp, room_id, score, commands_passed, commands_failed,
                     num_badges, total_modules, badges, module_counts)
@@ -28,29 +28,118 @@ class SqliteLeaderboard:
                     json.dumps(entry.get("module_counts", {})),
                 ),
             )
+            entry_id = cur.lastrowid
+            for module, counts in entry.get("module_scores", {}).items():
+                self._conn.execute(
+                    "INSERT INTO game_module_results (entry_id, module, passed, failed) VALUES (?, ?, ?, ?)",
+                    (entry_id, module, counts.get("passed", 0), counts.get("failed", 0)),
+                )
+            for badge_id, counts in entry.get("badge_scores", {}).items():
+                self._conn.execute(
+                    "INSERT INTO game_badge_scores (entry_id, badge_id, passed, failed) VALUES (?, ?, ?, ?)",
+                    (entry_id, badge_id, counts.get("passed", 0), counts.get("failed", 0)),
+                )
             self._conn.commit()
 
     def entries(self):
-        rows = self._conn.execute(
-            """SELECT timestamp, room_id, score, commands_passed, commands_failed,
-                      num_badges, total_modules, badges, module_counts
-               FROM leaderboard_entries
-               ORDER BY score DESC, num_badges DESC, commands_failed ASC"""
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id, timestamp, room_id, score, commands_passed, commands_failed,
+                          num_badges, total_modules, badges, module_counts
+                   FROM leaderboard_entries
+                   ORDER BY score DESC, num_badges DESC, commands_failed ASC"""
+            ).fetchall()
+
+            badge_scores = {}
+            module_results = {}
+            if rows:
+                ids = [r[0] for r in rows]
+                ph = ",".join("?" * len(ids))
+                for eid, bid, p, f in self._conn.execute(
+                    f"SELECT entry_id, badge_id, passed, failed FROM game_badge_scores WHERE entry_id IN ({ph})", ids
+                ).fetchall():
+                    badge_scores.setdefault(eid, {})[bid] = {"passed": p, "failed": f}
+                for eid, mod, p, f in self._conn.execute(
+                    f"SELECT entry_id, module, passed, failed FROM game_module_results WHERE entry_id IN ({ph})", ids
+                ).fetchall():
+                    module_results.setdefault(eid, {})[mod] = {"passed": p, "failed": f}
+
         return [
             {
-                "timestamp": row[0],
-                "room_id": row[1],
-                "score": row[2],
-                "commands_passed": row[3],
-                "commands_failed": row[4],
-                "num_badges": row[5],
-                "total_modules": row[6],
-                "badges": json.loads(row[7]),
-                "module_counts": json.loads(row[8]),
+                "timestamp": row[1],
+                "room_id": row[2],
+                "score": row[3],
+                "commands_passed": row[4],
+                "commands_failed": row[5],
+                "num_badges": row[6],
+                "total_modules": row[7],
+                "badges": json.loads(row[8]),
+                "module_counts": json.loads(row[9]),
+                "badge_scores": badge_scores.get(row[0], {}),
+                "module_results": module_results.get(row[0], {}),
             }
             for row in rows
         ]
+
+    def stats(self):
+        with self._lock:
+            agg = self._conn.execute(
+                """SELECT
+                       COUNT(*) AS total_games,
+                       AVG(score) AS avg_score,
+                       AVG(num_badges) AS avg_team_size,
+                       AVG(CAST(total_modules AS REAL) / num_badges) AS avg_modules_per_badge,
+                       MAX(total_modules) AS max_modules_in_game,
+                       AVG(commands_passed * 1.0 / (commands_passed + commands_failed)) AS avg_pass_rate
+                   FROM leaderboard_entries
+                   WHERE commands_passed + commands_failed > 0"""
+            ).fetchone()
+
+            total_games = self._conn.execute("SELECT COUNT(*) FROM leaderboard_entries").fetchone()[0]
+
+            score_by_size = self._conn.execute(
+                "SELECT num_badges, AVG(score) FROM leaderboard_entries GROUP BY num_badges ORDER BY num_badges"
+            ).fetchall()
+
+            module_rows = self._conn.execute(
+                """SELECT module, SUM(passed), SUM(failed)
+                   FROM game_module_results
+                   GROUP BY module
+                   ORDER BY module"""
+            ).fetchall()
+
+            distinct_badges = self._conn.execute(
+                "SELECT COUNT(DISTINCT badge_id) FROM game_badge_scores"
+            ).fetchone()[0]
+
+        if total_games == 0:
+            return {"total_games": 0}
+
+        module_stats = {}
+        for module, passed, failed in module_rows:
+            total = passed + failed
+            module_stats[module] = {
+                "passed": passed,
+                "failed": failed,
+                "success_rate": round(passed / total, 3) if total else None,
+            }
+
+        best = max(module_stats, key=lambda m: module_stats[m]["success_rate"] or 0) if module_stats else None
+        worst = min(module_stats, key=lambda m: module_stats[m]["success_rate"] or 1) if module_stats else None
+
+        return {
+            "total_games": total_games,
+            "avg_score": round(agg[1], 2) if agg[1] is not None else None,
+            "avg_team_size": round(agg[2], 2) if agg[2] is not None else None,
+            "score_by_team_size": {str(r[0]): round(r[1], 2) for r in score_by_size},
+            "avg_modules_per_badge": round(agg[3], 2) if agg[3] is not None else None,
+            "max_modules_in_game": agg[4],
+            "avg_pass_rate": round(agg[5], 3) if agg[5] is not None else None,
+            "distinct_badges_seen": distinct_badges,
+            "module_stats": module_stats,
+            "best_hexpansion": best,
+            "worst_hexpansion": worst,
+        }
 
 
 class InMemoryLeaderboard:
@@ -63,3 +152,26 @@ class InMemoryLeaderboard:
 
     def entries(self):
         return list(self._entries)
+
+    def stats(self):
+        if not self._entries:
+            return {"total_games": 0}
+        total = len(self._entries)
+        module_totals = {}
+        for e in self._entries:
+            for module, counts in e.get("module_scores", {}).items():
+                ms = module_totals.setdefault(module, {"passed": 0, "failed": 0})
+                ms["passed"] += counts.get("passed", 0)
+                ms["failed"] += counts.get("failed", 0)
+        module_stats = {}
+        for module, counts in module_totals.items():
+            t = counts["passed"] + counts["failed"]
+            module_stats[module] = {
+                **counts,
+                "success_rate": round(counts["passed"] / t, 3) if t else None,
+            }
+        return {
+            "total_games": total,
+            "avg_score": round(sum(e["score"] for e in self._entries) / total, 2),
+            "module_stats": module_stats,
+        }

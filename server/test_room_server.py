@@ -310,6 +310,14 @@ class RoomServerTestCase(unittest.TestCase):
             urllib.request.urlopen(req)
         self.assertEqual(ctx.exception.code, 400)
 
+    # ------------------------------------------------------------------ stats
+
+    def test_stats_endpoint_returns_total_games(self):
+        response, status = self._get_json("/api/stats")
+        self.assertEqual(status, 200)
+        self.assertIn("total_games", response)
+        self.assertIsInstance(response["total_games"], int)
+
     # ------------------------------------------------------------------ admin
 
     def test_admin_status_shape(self):

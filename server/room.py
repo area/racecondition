@@ -152,6 +152,7 @@ class Room:
         self._assignments = {}
         self._colours = {}
         self._badge_scores = {}
+        self._module_scores = {}
         self._session_tokens = {}
         self._next_assignment_id = 1
         self._scores = {"passed": 0, "failed": 0}
@@ -170,6 +171,7 @@ class Room:
         self._round_started_at = self._now()
         self._scores = {"passed": 0, "failed": 0}
         self._badge_scores = {bid: {"passed": 0, "failed": 0} for bid in self._badges}
+        self._module_scores = {}
         self._assignments = {}
         self._ready = set()
 
@@ -241,6 +243,7 @@ class Room:
             log.info("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], existing["module"], existing["command"])
             self._scores["failed"] += 1
             self._badge_scores.setdefault(badge_id, {"passed": 0, "failed": 0})["failed"] += 1
+            self._module_scores.setdefault(existing["module"], {"passed": 0, "failed": 0})["failed"] += 1
             self._assignments.pop(badge_id, None)
 
         if badge_id not in self._badges:
@@ -292,6 +295,7 @@ class Room:
             return
         self._scores[status] += 1
         self._badge_scores.setdefault(badge_id, {"passed": 0, "failed": 0})[status] += 1
+        self._module_scores.setdefault(expected["module"], {"passed": 0, "failed": 0})[status] += 1
         self._assignments.pop(badge_id, None)
 
     def _check_expiry(self):
@@ -331,6 +335,8 @@ class Room:
                 for bid, b in self._badges.items()
             },
             "module_counts": module_counts,
+            "module_scores": dict(self._module_scores),
+            "badge_scores": dict(self._badge_scores),
         }
         try:
             self._leaderboard.record(entry)

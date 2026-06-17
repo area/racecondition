@@ -177,6 +177,10 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"leaderboard": entries, "usernames": usernames})
             return
 
+        if self.path == "/api/stats":
+            self._send_json(200, leaderboard.stats())
+            return
+
         if re.match(r"^/register/[a-zA-Z0-9_-]+$", self.path):
             self._send_html(200, _load_html(REGISTER_HTML_PATH, "Register page"))
             return
