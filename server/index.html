@@ -4,26 +4,42 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tildateam</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f4efe3;
-            --panel: #fff9ec;
-            --line: #d7c9aa;
-            --text: #2c2314;
-            --accent: #0f766e;
-            --accent-2: #b45309;
-            --ok: #166534;
-            --bad: #991b1b;
-            --gold: #b45309;
-            --silver: #64748b;
-            --bronze: #92400e;
+            --bg:         #0d1c0c;
+            --surface:    #132211;
+            --trace:      #1e3a1a;
+            --silk:       #c8e6b4;
+            --silk-mid:   rgba(200, 230, 180, 0.68);
+            --silk-dim:   rgba(200, 230, 180, 0.38);
+            --copper:     #c8793a;
+            --copper-bg:  rgba(200, 121, 58, 0.1);
+            --led-green:  #22c55e;
+            --led-amber:  #f59e0b;
+            --led-blue:   #60a5fa;
+            --led-red:    #ef4444;
+            --ok:         #22c55e;
+            --bad:        #ef4444;
+            --gold:       #f59e0b;
+            --silver:     #94a3b8;
+            --bronze:     #c87941;
         }
+
         * { box-sizing: border-box; }
+
         body {
             margin: 0;
-            color: var(--text);
+            color: var(--silk);
             font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-            background: var(--bg);
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px),
+                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px);
+            background-size: 24px 42px;
+            background-position: 0 0, 12px 21px;
         }
 
         /* ── Nav ── */
@@ -31,10 +47,10 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            background: rgba(244, 239, 227, 0.92);
+            background: rgba(13, 28, 12, 0.96);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            border-bottom: 1px solid var(--line);
+            border-bottom: 1px solid var(--trace);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -42,24 +58,25 @@
             height: 52px;
         }
         .nav-brand {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-family: "Space Mono", monospace;
             font-weight: 700;
-            font-size: 20px;
-            letter-spacing: 0.02em;
+            font-size: 14px;
+            letter-spacing: 0.14em;
             text-decoration: none;
-            color: var(--text);
+            color: var(--copper);
+            text-transform: uppercase;
         }
         .nav-links { display: flex; gap: 2px; }
         .nav-links a {
             text-decoration: none;
-            color: var(--text);
-            font-size: 14px;
+            color: var(--silk-mid);
+            font-size: 12px;
+            font-family: "IBM Plex Mono", monospace;
             padding: 6px 11px;
-            border-radius: 8px;
-            opacity: 0.7;
-            transition: opacity 0.12s, background 0.12s;
+            border-radius: 3px;
+            transition: color 0.12s, background 0.12s;
         }
-        .nav-links a:hover { opacity: 1; background: rgba(44, 35, 20, 0.06); }
+        .nav-links a:hover { color: var(--silk); background: rgba(200, 230, 180, 0.06); }
 
         /* ── Sections ── */
         .section-wrap {
@@ -68,7 +85,7 @@
             padding: 52px 24px 48px;
         }
         .section-wrap + .section-wrap {
-            border-top: 1px solid var(--line);
+            border-top: 1px solid var(--trace);
         }
         .section-header {
             display: flex;
@@ -78,11 +95,14 @@
         }
         .section-header h2 {
             margin: 0;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 26px;
+            font-family: "Space Mono", monospace;
+            font-size: 11px;
             font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--copper);
         }
-        .section-sub { opacity: 0.6; font-size: 14px; }
+        .section-sub { color: var(--silk-dim); font-size: 13px; }
 
         /* ── About / hero ── */
         .about-grid {
@@ -93,29 +113,33 @@
         }
         .hero-text h1 {
             margin: 0 0 14px;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 44px;
-            font-weight: 800;
+            font-family: "Space Mono", monospace;
+            font-size: 38px;
+            font-weight: 700;
             letter-spacing: -0.01em;
-            line-height: 1.08;
+            line-height: 1.12;
+            color: var(--silk);
         }
         .hero-text .tagline {
-            font-size: 16px;
-            line-height: 1.65;
-            opacity: 0.75;
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--silk-mid);
             margin: 0;
         }
         .how-to-play {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 14px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             padding: 20px 22px;
         }
         .how-to-play h3 {
-            margin: 0 0 12px;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 16px;
+            margin: 0 0 14px;
+            font-family: "Space Mono", monospace;
+            font-size: 10px;
             font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--copper);
         }
         .steps { list-style: none; padding: 0; margin: 0; }
         .steps li {
@@ -124,8 +148,9 @@
             align-items: flex-start;
             padding: 9px 0;
             font-size: 13.5px;
-            line-height: 1.5;
-            border-bottom: 1px solid var(--line);
+            line-height: 1.55;
+            border-bottom: 1px solid var(--trace);
+            color: var(--silk-mid);
         }
         .steps li:last-child { border-bottom: none; padding-bottom: 0; }
         .step-num {
@@ -133,9 +158,11 @@
             width: 20px;
             height: 20px;
             border-radius: 50%;
-            background: var(--accent);
-            color: #fff;
-            font-size: 11px;
+            background: transparent;
+            border: 1px solid var(--copper);
+            color: var(--copper);
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 10px;
             font-weight: 700;
             display: flex;
             align-items: center;
@@ -143,11 +170,11 @@
             margin-top: 2px;
         }
 
-        /* ── Hexpansions section ── */
+        /* ── Hexpansions ── */
         .hexp-intro {
             font-size: 15px;
             line-height: 1.6;
-            opacity: 0.8;
+            color: var(--silk-mid);
             margin: 0 0 24px;
         }
         .hexp-grid {
@@ -157,57 +184,62 @@
             margin-bottom: 20px;
         }
         .hexp-card {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 14px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             padding: 20px;
-            box-shadow: 0 4px 12px rgba(44, 35, 20, 0.05);
         }
         .hexp-card h3 {
-            margin: 0 0 6px;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 20px;
+            margin: 0 0 8px;
+            font-family: "Space Mono", monospace;
+            font-size: 14px;
             font-weight: 700;
+            color: var(--silk);
         }
         .hexp-tag {
             display: inline-block;
-            border-radius: 999px;
-            padding: 2px 9px;
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
+            border-radius: 2px;
+            padding: 2px 7px;
+            font-size: 9px;
+            font-weight: 700;
+            font-family: "IBM Plex Mono", monospace;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
             margin-bottom: 12px;
         }
-        .hexp-builtin { background: rgba(15, 118, 110, 0.12); color: var(--accent); }
-        .hexp-plugin  { background: rgba(180, 83, 9, 0.1); color: var(--accent-2); }
-        .hexp-soon    { background: rgba(100, 116, 139, 0.12); color: var(--silver); }
-        .hexp-card-soon { border-style: dashed; opacity: 0.7; }
-        .hexp-desc { font-size: 13.5px; line-height: 1.55; margin: 0 0 12px; opacity: 0.8; }
+        .hexp-builtin { background: rgba(34, 197, 94, 0.12); color: var(--led-green); border: 1px solid rgba(34, 197, 94, 0.28); }
+        .hexp-plugin  { background: rgba(200, 121, 58, 0.1); color: var(--copper); border: 1px solid rgba(200, 121, 58, 0.28); }
+        .hexp-soon    { background: transparent; color: var(--silk-dim); border: 1px solid var(--trace); }
+        .hexp-card-soon { border-style: dashed; opacity: 0.65; }
+        .hexp-desc { font-size: 13.5px; line-height: 1.55; margin: 0 0 12px; color: var(--silk-mid); }
+        .hexp-desc a { color: var(--copper); text-decoration: none; }
+        .hexp-desc a:hover { text-decoration: underline; }
         .cmd-chips { display: flex; flex-wrap: wrap; gap: 4px; }
         .cmd-chip {
-            background: rgba(15, 118, 110, 0.08);
-            border: 1px solid rgba(15, 118, 110, 0.2);
-            border-radius: 6px;
-            padding: 3px 9px;
-            font-size: 12px;
+            background: rgba(200, 121, 58, 0.08);
+            border: 1px solid rgba(200, 121, 58, 0.22);
+            border-radius: 2px;
+            padding: 2px 7px;
+            font-size: 11px;
             font-family: "IBM Plex Mono", monospace;
-            color: var(--accent);
+            color: var(--copper);
         }
-        .cmd-chip-dim { opacity: 0.4; }
-        .hexp-note { font-size: 11px; opacity: 0.5; margin-top: 7px; font-style: italic; }
+        .cmd-chip-dim { opacity: 0.35; }
+        .hexp-note { font-size: 11px; color: var(--silk-dim); margin-top: 7px; font-style: italic; font-family: "IBM Plex Mono", monospace; }
 
         /* ── Live status ── */
         .live-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: var(--ok);
+            background: var(--led-green);
+            box-shadow: 0 0 6px var(--led-green);
             flex-shrink: 0;
-            animation: blink 2.2s ease-in-out infinite;
+            animation: led-blink 2.2s ease-in-out infinite;
         }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+        @keyframes led-blink {
+            0%, 100% { opacity: 1; box-shadow: 0 0 7px var(--led-green); }
+            50% { opacity: 0.35; box-shadow: none; }
         }
         .rooms-grid {
             display: grid;
@@ -218,60 +250,78 @@
             grid-column: 1 / -1;
             padding: 40px 0;
             text-align: center;
-            opacity: 0.5;
+            color: var(--silk-dim);
             font-size: 15px;
         }
         .no-rooms-icon { font-size: 32px; margin-bottom: 8px; }
         .room-card {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 12px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             padding: 14px;
-            box-shadow: 0 4px 10px rgba(44, 35, 20, 0.05);
         }
         .room-card h3 {
             margin: 0 0 8px;
-            font-size: 17px;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-size: 15px;
+            font-family: "Space Mono", monospace;
+            color: var(--silk);
         }
         .room-row {
             display: flex;
             justify-content: space-between;
             font-size: 13px;
             margin-bottom: 3px;
+            color: var(--silk-mid);
         }
         .state-badge {
-            display: inline-block;
-            border-radius: 999px;
-            padding: 2px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.03em;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 2px;
+            padding: 2px 7px;
+            font-size: 9px;
+            font-weight: 700;
+            font-family: "IBM Plex Mono", monospace;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            vertical-align: middle;
         }
-        .state-waiting  { background: #fef3c7; color: #92400e; }
-        .state-in-round { background: #dcfce7; color: #166534; }
-        .state-finished { background: #e0e7ff; color: #3730a3; }
+        .state-badge::before {
+            content: '';
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .state-waiting  { background: rgba(245, 158, 11, 0.1); color: var(--led-amber); border: 1px solid rgba(245, 158, 11, 0.25); }
+        .state-waiting::before  { background: var(--led-amber); }
+        .state-in-round { background: rgba(34, 197, 94, 0.1); color: var(--led-green); border: 1px solid rgba(34, 197, 94, 0.25); }
+        .state-in-round::before { background: var(--led-green); box-shadow: 0 0 4px var(--led-green); }
+        .state-finished { background: rgba(96, 165, 250, 0.1); color: var(--led-blue); border: 1px solid rgba(96, 165, 250, 0.25); }
+        .state-finished::before { background: var(--led-blue); }
 
         /* ── Leaderboard ── */
         .info-btn {
             background: none;
-            border: 1px solid var(--line);
-            border-radius: 999px;
+            border: 1px solid var(--trace);
+            border-radius: 2px;
             padding: 2px 10px;
-            font-size: 12px;
+            font-size: 11px;
+            font-family: "IBM Plex Mono", monospace;
             cursor: pointer;
-            color: var(--accent);
+            color: var(--copper);
         }
-        .info-btn:hover { background: rgba(15, 118, 110, 0.08); }
+        .info-btn:hover { background: var(--copper-bg); }
         .info-panel {
             display: none;
             margin-bottom: 18px;
             padding: 12px 16px;
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 10px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             font-size: 14px;
-            max-width: 500px;
+            color: var(--silk-mid);
         }
         .info-panel.open { display: block; }
         .info-panel p { margin: 0 0 6px; }
@@ -279,64 +329,71 @@
         .formula {
             font-family: "IBM Plex Mono", monospace;
             font-size: 12px;
-            background: rgba(15, 118, 110, 0.07);
-            border-radius: 6px;
+            background: rgba(200, 121, 58, 0.08);
+            border: 1px solid rgba(200, 121, 58, 0.2);
+            border-radius: 2px;
             padding: 6px 10px;
             margin: 8px 0;
+            color: var(--copper);
         }
         table { width: 100%; border-collapse: collapse; }
-        thead tr { border-bottom: 2px solid var(--line); }
+        thead tr { border-bottom: 1px solid var(--copper); }
         th {
             text-align: left;
             padding: 8px 12px;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: "IBM Plex Mono", monospace;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
-            opacity: 0.6;
+            color: var(--copper);
+            opacity: 1;
         }
         th.right { text-align: right; }
-        tbody tr { border-bottom: 1px solid var(--line); transition: background 0.15s; }
-        tbody tr:hover { background: rgba(180, 83, 9, 0.04); }
-        td { padding: 10px 12px; font-size: 15px; vertical-align: middle; }
+        tbody tr { border-bottom: 1px solid var(--trace); transition: background 0.1s; }
+        tbody tr:hover { background: rgba(200, 230, 180, 0.03); }
+        td { padding: 10px 12px; font-size: 14px; vertical-align: middle; color: var(--silk-mid); }
         td.right { text-align: right; }
         .rank {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-family: "Space Mono", monospace;
             font-weight: 700;
-            font-size: 18px;
+            font-size: 16px;
             width: 44px;
             text-align: center;
+            color: var(--silk-dim);
         }
         .rank-1 { color: var(--gold); }
         .rank-2 { color: var(--silver); }
         .rank-3 { color: var(--bronze); }
         .score {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-family: "Space Mono", monospace;
             font-weight: 700;
-            font-size: 20px;
-            color: var(--accent);
+            font-size: 18px;
+            color: var(--copper);
         }
         .score-top { color: var(--gold); }
         .pass { color: var(--ok); font-weight: 600; }
         .fail { color: var(--bad); font-weight: 600; }
-        .muted { opacity: 0.55; font-size: 13px; }
-        .badge-row { display: flex; align-items: center; gap: 5px; margin: 2px 0; font-size: 13px; }
-        .badge-name { font-size: 13px; font-weight: 600; }
-        .badge-mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; opacity: 0.55; }
+        .muted { color: var(--silk-dim); font-size: 13px; }
+        .badge-row { display: grid; grid-template-columns: 7em 1fr; align-items: center; gap: 6px; margin: 2px 0; font-size: 13px; }
+        .badge-name { font-size: 13px; font-weight: 600; color: var(--silk); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .badge-mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--silk-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .badge-mods { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
         .module-tag {
             display: inline-block;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            padding: 1px 7px;
+            border: 1px solid rgba(200, 121, 58, 0.28);
+            border-radius: 2px;
+            padding: 1px 5px;
             margin: 1px 2px 1px 0;
             font-size: 11px;
-            color: var(--accent);
-            background: rgba(15, 118, 110, 0.08);
+            font-family: "IBM Plex Mono", monospace;
+            color: var(--copper);
+            background: rgba(200, 121, 58, 0.07);
         }
-        .ts { font-size: 12px; opacity: 0.6; white-space: nowrap; }
-        .empty { text-align: center; padding: 40px 0; opacity: 0.5; font-size: 15px; }
+        .ts { font-size: 12px; color: var(--silk-dim); white-space: nowrap; font-family: "IBM Plex Mono", monospace; }
+        .empty { text-align: center; padding: 40px 0; color: var(--silk-dim); font-size: 14px; }
         @keyframes flash-in {
-            0%   { background: rgba(15, 118, 110, 0.15); }
+            0%   { background: rgba(34, 197, 94, 0.1); }
             100% { background: transparent; }
         }
         .new-entry { animation: flash-in 1.2s ease; }
@@ -349,51 +406,73 @@
             margin-bottom: 4px;
         }
         .stat-card {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 12px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             padding: 16px;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100px;
         }
         .stat-value {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 28px;
+            font-family: "Space Mono", monospace;
+            font-size: 26px;
             font-weight: 700;
-            color: var(--accent);
+            color: var(--copper);
             line-height: 1;
             margin-bottom: 6px;
         }
-        .stat-label { font-size: 12px; opacity: 0.6; font-weight: 500; line-height: 1.3; }
+        .stat-label {
+            font-size: 10px;
+            color: var(--silk-dim);
+            font-family: "IBM Plex Mono", monospace;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            line-height: 1.4;
+        }
         .stats-module-h3 {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 16px;
+            font-family: "Space Mono", monospace;
+            font-size: 10px;
             font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--copper);
             margin: 24px 0 12px;
         }
         .coming-soon {
-            background: var(--panel);
-            border: 1px dashed var(--line);
-            border-radius: 14px;
+            background: var(--surface);
+            border: 1px dashed var(--trace);
+            border-radius: 4px;
             padding: 48px 24px;
             text-align: center;
-            opacity: 0.55;
+            color: var(--silk-dim);
         }
         .coming-soon-icon { font-size: 32px; margin-bottom: 10px; }
 
         /* ── Footer ── */
         .page-footer {
-            border-top: 1px solid var(--line);
+            border-top: 1px solid var(--trace);
             padding: 14px 24px;
-            font-size: 12px;
-            opacity: 0.45;
+            font-size: 11px;
+            color: var(--silk-dim);
+            font-family: "IBM Plex Mono", monospace;
+            letter-spacing: 0.04em;
             max-width: 900px;
             margin: 0 auto;
         }
 
+        @media (prefers-reduced-motion: reduce) {
+            .live-dot { animation: none; }
+            .new-entry { animation: none; }
+        }
+
         @media (max-width: 620px) {
             .about-grid { grid-template-columns: 1fr; }
-            .hero-text h1 { font-size: 34px; }
-            .nav-links a { padding: 6px 8px; }
+            .hero-text h1 { font-size: 28px; }
+            .nav-links a { padding: 6px 8px; font-size: 11px; }
         }
     </style>
 </head>
@@ -430,7 +509,7 @@
                 </li>
                 <li>
                     <span class="step-num">3</span>
-                    <span>Your badge shows commands for <em>other</em> colours: "Green: press Button A". Shout it at the right player.</span>
+                    <span>Your badge shows commands for <em>other</em> colours: "Green: press Button A". Communicate that instruction to the correct player while everyone else is doing the same in, presumably, a calm and orderly fashion.</span>
                 </li>
                 <li>
                     <span class="step-num">4</span>
@@ -455,7 +534,7 @@
         <div class="hexp-card">
             <h3>🔷 Tildagon 2024</h3>
             <div class="hexp-tag hexp-builtin">Badge</div>
-            <p class="hexp-desc">The trusty old 2024 Tildagon. Press any of the six buttons around the edge, or shake the whole badge (NB if any hexpansions are plugged in, 'Shake' is disabled. There was... an incident during testing).</p>
+            <p class="hexp-desc">The trusty old 2024 Tildagon. Press any of the six buttons around the edge, or shake or flip the whole badge (NB if any hexpansions are plugged in, 'Shake' and 'Flip' are disabled. There was... an incident during testing).</p>
             <div class="cmd-chips">
                 <span class="cmd-chip">a</span>
                 <span class="cmd-chip">b</span>
@@ -464,6 +543,7 @@
                 <span class="cmd-chip">e</span>
                 <span class="cmd-chip">f</span>
                 <span class="cmd-chip">shake</span>
+                <span class="cmd-chip">flip</span>
             </div>
         </div>
         <div class="hexp-card">
@@ -662,7 +742,7 @@
         if (!entry.badges || !Object.keys(entry.badges).length)
             return `<span class="muted">${entry.num_badges} badge${entry.num_badges !== 1 ? "s" : ""}</span>`;
         return Object.entries(entry.badges).map(([id, mods]) =>
-            `<div class="badge-row">${playerLabel(id, usernames)}${mods.map(m => `<span class="module-tag">${esc(m)}</span>`).join("")}</div>`
+            `<div class="badge-row">${playerLabel(id, usernames)}<span class="badge-mods">${mods.map(m => `<span class="module-tag">${esc(m)}</span>`).join("")}</span></div>`
         ).join("");
     }
 
@@ -728,17 +808,20 @@
         statsEmpty.style.display = "none";
 
         const ms = s.module_stats || {};
-        const bestRate  = s.best_hexpansion  ? pct(ms[s.best_hexpansion]?.success_rate)  : null;
-        const worstRate = s.worst_hexpansion ? pct(ms[s.worst_hexpansion]?.success_rate) : null;
+        const bestRate    = s.best_hexpansion    ? pct(ms[s.best_hexpansion]?.success_rate)    : null;
+        const worstRate   = s.worst_hexpansion   ? pct(ms[s.worst_hexpansion]?.success_rate)   : null;
+        const busiestVol  = s.busiest_hexpansion ? (ms[s.busiest_hexpansion]?.passed ?? 0) + (ms[s.busiest_hexpansion]?.failed ?? 0) : null;
         const cards = [
             statCard(s.total_games, "Games played"),
+            s.total_commands_issued != null ? statCard(s.total_commands_issued.toLocaleString(), "Commands issued") : "",
             s.avg_score       != null ? statCard(s.avg_score.toFixed(1),      "Avg score")              : "",
             s.avg_team_size   != null ? statCard(s.avg_team_size.toFixed(1),   "Avg team size")          : "",
             s.avg_pass_rate   != null ? statCard(pct(s.avg_pass_rate),         "Avg pass rate")          : "",
             s.distinct_badges_seen != null ? statCard(s.distinct_badges_seen,  "Unique badges seen")     : "",
             s.max_modules_in_game  != null ? statCard(s.max_modules_in_game,   "Most hexpansions in a game") : "",
-            s.best_hexpansion  && bestRate  ? `<div class="stat-card"><div class="stat-value">${esc(s.best_hexpansion)}<br><span style="font-size:13px;opacity:.6">${bestRate}</span></div><div class="stat-label">Easiest module</div></div>`  : "",
-            s.worst_hexpansion && worstRate ? `<div class="stat-card"><div class="stat-value">${esc(s.worst_hexpansion)}<br><span style="font-size:13px;opacity:.6">${worstRate}</span></div><div class="stat-label">Hardest module</div></div>` : "",
+            s.best_hexpansion  && bestRate   ? `<div class="stat-card"><div class="stat-value">${esc(s.best_hexpansion)}<br><span style="font-size:13px;opacity:.6">${bestRate}</span></div><div class="stat-label">Easiest module</div></div>`   : "",
+            s.worst_hexpansion && worstRate  ? `<div class="stat-card"><div class="stat-value">${esc(s.worst_hexpansion)}<br><span style="font-size:13px;opacity:.6">${worstRate}</span></div><div class="stat-label">Hardest module</div></div>` : "",
+            s.busiest_hexpansion && busiestVol != null ? `<div class="stat-card"><div class="stat-value">${esc(s.busiest_hexpansion)}<br><span style="font-size:13px;opacity:.6">${busiestVol.toLocaleString()} cmds</span></div><div class="stat-label">Busiest module</div></div>` : "",
         ];
         statsCards.innerHTML = cards.join("");
 
@@ -749,8 +832,8 @@
         const rows = entries.map(([name, m]) => {
             const isBest  = name === s.best_hexpansion;
             const isWorst = name === s.worst_hexpansion && entries.length > 1;
-            const badge = isBest  ? ' <span class="hexp-tag hexp-builtin" style="font-size:10px;vertical-align:middle">best</span>'
-                        : isWorst ? ' <span class="hexp-tag hexp-soon"    style="font-size:10px;vertical-align:middle">worst</span>'
+            const badge = isBest  ? ' <span class="hexp-tag hexp-builtin" style="font-size:9px;vertical-align:middle">best</span>'
+                        : isWorst ? ' <span class="hexp-tag hexp-soon"    style="font-size:9px;vertical-align:middle">worst</span>'
                         : "";
             return `<tr>
                 <td>${esc(name)}${badge}</td>

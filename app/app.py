@@ -17,6 +17,24 @@ from .room_client import RoomClient
 from .session import GameSession
 from .test_session import TestSession
 
+class _CapabilitiesSync:
+	def __init__(self):
+		self._dirty = True
+		self._last_sent = None
+
+	def maybe_caps(self, current):
+		if self._dirty or current != self._last_sent:
+			return current
+		return None
+
+	def mark_sent(self, caps):
+		self._dirty = False
+		self._last_sent = caps
+
+	def mark_dirty(self):
+		self._dirty = True
+
+
 BADGE_COLOURS = {
     "red":    (40,  0,  0),
     "cyan":   ( 0, 30, 30),
@@ -68,8 +86,7 @@ class TildateamApp(app.App):
 		self._test_session = None
 		self._qr_active = False
 		self._qr_matrix = None
-		self._caps_dirty = True
-		self._last_sent_caps = None
+		self._caps_sync = _CapabilitiesSync()
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -240,7 +257,7 @@ class TildateamApp(app.App):
 				"known": friendly_name is not None,
 			}
 		self.module_registry.scan(hexpansions)
-		self._caps_dirty = True
+		self._caps_sync.mark_dirty()
 		if self.session.expected_module and self.module_registry.get_by_name(self.session.expected_module.FRIENDLY_NAME) is None:
 			self.session.clear_assignment()
 
@@ -254,19 +271,19 @@ class TildateamApp(app.App):
 		self._network_error_shown = False
 		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
-		self._caps_dirty = True
-		self._last_sent_caps = None
+		self._caps_sync.mark_dirty()
 		if self.room_client.available():
+			caps = self._capabilities()
 			data, error = self.room_client.join_room(
 				self.session.room_id,
 				self.badge_id,
-				self._capabilities(),
+				caps,
 			)
 			if error:
 				self.notification = Notification("Join failed: {}".format(error))
 			elif data:
 				self.session.session_token = data.get("session_token")
-				self._caps_dirty = False
+				self._caps_sync.mark_sent(caps)
 		self._poll_server(force=True)
 
 	def _start_round(self):
@@ -381,11 +398,7 @@ class TildateamApp(app.App):
 				self._network_error_shown = True
 			return
 
-		current_caps = self._capabilities()
-		if self._caps_dirty or current_caps != self._last_sent_caps:
-			caps = current_caps
-		else:
-			caps = None
+		caps = self._caps_sync.maybe_caps(self._capabilities())
 		data, error = self.room_client.poll(
 			self.session.room_id,
 			self.badge_id,
@@ -400,10 +413,9 @@ class TildateamApp(app.App):
 			return
 
 		if caps is not None:
-			self._caps_dirty = False
-			self._last_sent_caps = caps
+			self._caps_sync.mark_sent(caps)
 		if data.get("need_capabilities"):
-			self._caps_dirty = True
+			self._caps_sync.mark_dirty()
 
 		new_colour = self.session.apply_poll_response(
 			data,

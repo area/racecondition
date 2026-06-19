@@ -215,7 +215,7 @@ class TestScoring(unittest.TestCase):
         room, assignment, token = self._setup_with_assignment(9)
         if not assignment:
             self.skipTest("no assignment")
-        room._assignments["badge-a"]["issued_at"] -= _room_mod.ASSIGNMENT_TIMEOUT_S + 1
+        room._badges["badge-a"].assignment.issued_at -= _room_mod.ASSIGNMENT_TIMEOUT_S + 1
         room.poll("badge-a", GPS_CAPS, session_token=token)  # triggers timeout
         self.assertEqual(room._module_scores.get("GPS", {}).get("failed"), 1)
 
@@ -233,9 +233,9 @@ class TestScoring(unittest.TestCase):
         room.poll("badge-a", GPS_CAPS)  # triggers _record_score
         self.assertEqual(len(lb.entries()), 1)
         entry = lb.entries()[0]
-        self.assertIn("module_scores", entry)
+        self.assertIn("module_results", entry)
         self.assertIn("badge_scores", entry)
-        self.assertIsInstance(entry["module_scores"], dict)
+        self.assertIsInstance(entry["module_results"], dict)
         self.assertIsInstance(entry["badge_scores"], dict)
 
 

@@ -75,6 +75,17 @@ class RoomServerTestCase(unittest.TestCase):
                 return json.loads(content), resp.code
             return content, resp.code
 
+    def _admin_get_json(self, path):
+        import base64, json
+        url = BASE_URL + path
+        creds = base64.b64encode(("admin:" + room_server._ADMIN_PASSWORD).encode()).decode()
+        req = urllib.request.Request(url, headers={"Authorization": "Basic " + creds})
+        with urllib.request.urlopen(req) as resp:
+            content = resp.read().decode("utf-8")
+            if resp.headers.get("Content-Type", "").startswith("application/json"):
+                return json.loads(content), resp.code
+            return content, resp.code
+
     # ------------------------------------------------------------------ join
 
     def test_join_room_full_returns_error(self):
@@ -321,7 +332,7 @@ class RoomServerTestCase(unittest.TestCase):
     # ------------------------------------------------------------------ admin
 
     def test_admin_status_shape(self):
-        response, status = self._get_json("/api/admin/status")
+        response, status = self._admin_get_json("/api/admin/status")
         self.assertEqual(status, 200)
         self.assertIn("rooms", response)
         self.assertIn("total_badges", response)
@@ -361,7 +372,7 @@ class RoomServerTestCase(unittest.TestCase):
             self.assertGreater(r["badge_count"], 0)
 
     def test_admin_page_returns_html(self):
-        response, status = self._get_json("/admin")
+        response, status = self._admin_get_json("/admin")
         self.assertEqual(status, 200)
         self.assertIsInstance(response, str)
         self.assertIn("html", response.lower())
@@ -372,7 +383,7 @@ class RoomServerTestCase(unittest.TestCase):
         for i in range(2):
             self.client.join_room(room_id, "multi-{}".format(i), GPS_CAPS)
 
-        response, _ = self._get_json("/api/admin/status")
+        response, _ = self._admin_get_json("/api/admin/status")
         room_4 = next(r for r in response["rooms"] if r["room_id"] == room_id)
         self.assertGreaterEqual(room_4["badge_count"], 2)
 

@@ -94,6 +94,20 @@ class TestSqliteLeaderboardStats(unittest.TestCase):
         self.assertEqual(result["best_hexpansion"], "BLING")
         self.assertEqual(result["worst_hexpansion"], "GPS")
 
+    def test_stats_total_commands_issued(self):
+        self.lb.record(_ENTRY_A)
+        self.lb.record(_ENTRY_B)
+        result = self.lb.stats()
+        # A: 8+2=10, B: 3+7=10 → 20 total
+        self.assertEqual(result["total_commands_issued"], 20)
+
+    def test_stats_busiest_hexpansion(self):
+        self.lb.record(_ENTRY_A)
+        self.lb.record(_ENTRY_B)
+        result = self.lb.stats()
+        # GPS: 5+1+3+7=16, BLING: 3+1=4 → GPS is busiest
+        self.assertEqual(result["busiest_hexpansion"], "GPS")
+
     def test_stats_distinct_badges_seen(self):
         self.lb.record(_ENTRY_A)
         self.lb.record(_ENTRY_B)

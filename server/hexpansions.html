@@ -4,30 +4,42 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Hexpansion Support — Tildateam</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f4efe3;
-            --panel: #fff9ec;
-            --line: #d7c9aa;
-            --text: #2c2314;
-            --accent: #0f766e;
-            --accent-2: #b45309;
+            --bg:         #0d1c0c;
+            --surface:    #132211;
+            --trace:      #1e3a1a;
+            --silk:       #c8e6b4;
+            --silk-mid:   rgba(200, 230, 180, 0.68);
+            --silk-dim:   rgba(200, 230, 180, 0.38);
+            --copper:     #c8793a;
+            --copper-bg:  rgba(200, 121, 58, 0.1);
+            --led-green:  #22c55e;
+            --led-amber:  #f59e0b;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            color: var(--text);
+            color: var(--silk);
             font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-            background: var(--bg);
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px),
+                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px);
+            background-size: 24px 42px;
+            background-position: 0 0, 12px 21px;
         }
         nav {
             position: sticky;
             top: 0;
             z-index: 100;
-            background: rgba(244, 239, 227, 0.92);
+            background: rgba(13, 28, 12, 0.96);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            border-bottom: 1px solid var(--line);
+            border-bottom: 1px solid var(--trace);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -35,20 +47,22 @@
             height: 52px;
         }
         .nav-brand {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            font-family: "Space Mono", monospace;
             font-weight: 700;
-            font-size: 20px;
-            letter-spacing: 0.02em;
+            font-size: 14px;
+            letter-spacing: 0.14em;
             text-decoration: none;
-            color: var(--text);
+            color: var(--copper);
+            text-transform: uppercase;
         }
         .nav-back {
-            font-size: 14px;
-            color: var(--text);
+            font-size: 12px;
+            font-family: "IBM Plex Mono", monospace;
+            color: var(--silk-dim);
             text-decoration: none;
-            opacity: 0.65;
+            transition: color 0.12s;
         }
-        .nav-back:hover { opacity: 1; }
+        .nav-back:hover { color: var(--silk-mid); }
 
         .page {
             max-width: 740px;
@@ -57,53 +71,65 @@
         }
         h1 {
             margin: 0 0 8px;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 36px;
-            font-weight: 800;
+            font-family: "Space Mono", monospace;
+            font-size: 28px;
+            font-weight: 700;
             letter-spacing: -0.01em;
+            color: var(--silk);
         }
         .lead {
-            font-size: 16px;
-            line-height: 1.65;
-            opacity: 0.75;
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--silk-mid);
             margin: 0 0 48px;
             max-width: 560px;
         }
         h2 {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 22px;
+            font-family: "Space Mono", monospace;
+            font-size: 10px;
             font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--copper);
             margin: 48px 0 14px;
             padding-top: 48px;
-            border-top: 1px solid var(--line);
+            border-top: 1px solid var(--trace);
         }
         h2:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
         h3 {
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 16px;
+            font-family: "Space Mono", monospace;
+            font-size: 12px;
             font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--silk);
             margin: 28px 0 8px;
         }
-        p { font-size: 15px; line-height: 1.65; margin: 0 0 14px; }
+        p { font-size: 15px; line-height: 1.7; margin: 0 0 14px; color: var(--silk-mid); }
         p:last-child { margin-bottom: 0; }
-        a { color: var(--accent); }
-        ul, ol { font-size: 15px; line-height: 1.7; margin: 0 0 14px; padding-left: 22px; }
+        a { color: var(--copper); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul, ol { font-size: 15px; line-height: 1.7; margin: 0 0 14px; padding-left: 22px; color: var(--silk-mid); }
         li { margin-bottom: 4px; }
+        strong { color: var(--silk); }
+        em { color: var(--silk-mid); }
         code {
             font-family: "IBM Plex Mono", monospace;
-            font-size: 0.88em;
-            background: rgba(15, 118, 110, 0.08);
-            border-radius: 4px;
+            font-size: 0.87em;
+            background: rgba(200, 121, 58, 0.08);
+            border: 1px solid rgba(200, 121, 58, 0.2);
+            border-radius: 2px;
             padding: 1px 5px;
+            color: var(--copper);
         }
         pre {
-            background: #1e1a14;
-            color: #e8dfc8;
-            border-radius: 10px;
+            background: #08120800;
+            background-color: #080f07;
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             padding: 18px 20px;
             overflow-x: auto;
             font-size: 13px;
-            line-height: 1.6;
+            line-height: 1.65;
             margin: 12px 0 20px;
             font-family: "IBM Plex Mono", monospace;
         }
@@ -111,28 +137,29 @@
             background: none;
             padding: 0;
             font-size: inherit;
-            color: inherit;
-            border-radius: 0;
+            color: var(--silk-mid);
+            border: none;
         }
         .hl-kw  { color: #7dd3c8; }
         .hl-str { color: #c8a96e; }
-        .hl-cmt { color: #6e6458; font-style: italic; }
-        .hl-cls { color: #e8c57a; }
-        .hl-fn  { color: #a8d4a8; }
-        .hl-num { color: #d4a8a8; }
+        .hl-cmt { color: rgba(200, 230, 180, 0.3); font-style: italic; }
+        .hl-cls { color: var(--led-amber); }
+        .hl-fn  { color: #86efac; }
+        .hl-num { color: #f9a8d4; }
 
         .callout {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-left: 3px solid var(--accent);
-            border-radius: 8px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-left: 3px solid var(--led-green);
+            border-radius: 3px;
             padding: 12px 16px;
             font-size: 14px;
             line-height: 1.6;
             margin: 16px 0;
+            color: var(--silk-mid);
         }
         .callout-warn {
-            border-left-color: var(--accent-2);
+            border-left-color: var(--led-amber);
         }
 
         .api-table {
@@ -144,20 +171,27 @@
         .api-table th {
             text-align: left;
             padding: 7px 12px;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: "IBM Plex Mono", monospace;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
-            opacity: 0.55;
-            border-bottom: 2px solid var(--line);
+            color: var(--copper);
+            border-bottom: 1px solid var(--copper);
         }
         .api-table td {
             padding: 9px 12px;
-            border-bottom: 1px solid var(--line);
+            border-bottom: 1px solid var(--trace);
             vertical-align: top;
+            color: var(--silk-mid);
         }
         .api-table tr:last-child td { border-bottom: none; }
-        .api-table td:first-child { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; white-space: nowrap; }
+        .api-table td:first-child {
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 12px;
+            white-space: nowrap;
+            color: var(--copper);
+        }
 
         .step-list { list-style: none; padding: 0; margin: 0 0 20px; }
         .step-list li {
@@ -165,15 +199,18 @@
             gap: 14px;
             align-items: flex-start;
             margin-bottom: 16px;
+            color: var(--silk-mid);
         }
         .step-n {
             flex-shrink: 0;
-            width: 24px;
-            height: 24px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
-            background: var(--accent);
-            color: #fff;
-            font-size: 12px;
+            background: transparent;
+            border: 1px solid var(--copper);
+            color: var(--copper);
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 11px;
             font-weight: 700;
             display: flex;
             align-items: center;
@@ -188,25 +225,26 @@
             margin: 16px 0;
         }
         .existing-card {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 10px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
             padding: 14px;
             font-size: 13px;
         }
         .existing-card strong {
             display: block;
-            font-family: "Space Grotesk", "Avenir Next", sans-serif;
-            font-size: 15px;
+            font-family: "Space Mono", monospace;
+            font-size: 13px;
             margin-bottom: 4px;
+            color: var(--silk);
         }
         .existing-card .file-path {
             font-family: "IBM Plex Mono", monospace;
             font-size: 11px;
-            opacity: 0.55;
+            color: var(--copper);
             margin-bottom: 6px;
         }
-        .existing-card p { font-size: 13px; margin: 0; opacity: 0.75; }
+        .existing-card p { font-size: 13px; margin: 0; color: var(--silk-dim); }
     </style>
 </head>
 <body>

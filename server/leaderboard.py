@@ -90,7 +90,9 @@ class SqliteLeaderboard:
                        AVG(num_badges) AS avg_team_size,
                        AVG(CAST(total_modules AS REAL) / num_badges) AS avg_modules_per_badge,
                        MAX(total_modules) AS max_modules_in_game,
-                       AVG(commands_passed * 1.0 / (commands_passed + commands_failed)) AS avg_pass_rate
+                       AVG(commands_passed * 1.0 / (commands_passed + commands_failed)) AS avg_pass_rate,
+                       SUM(commands_passed) AS total_commands_passed,
+                       SUM(commands_failed) AS total_commands_failed
                    FROM leaderboard_entries
                    WHERE commands_passed + commands_failed > 0"""
             ).fetchone()
@@ -126,6 +128,10 @@ class SqliteLeaderboard:
 
         best = max(module_stats, key=lambda m: module_stats[m]["success_rate"] or 0) if module_stats else None
         worst = min(module_stats, key=lambda m: module_stats[m]["success_rate"] or 1) if module_stats else None
+        busiest = max(module_stats, key=lambda m: module_stats[m]["passed"] + module_stats[m]["failed"]) if module_stats else None
+
+        total_commands_passed = agg[6] or 0
+        total_commands_failed = agg[7] or 0
 
         return {
             "total_games": total_games,
@@ -135,10 +141,12 @@ class SqliteLeaderboard:
             "avg_modules_per_badge": round(agg[3], 2) if agg[3] is not None else None,
             "max_modules_in_game": agg[4],
             "avg_pass_rate": round(agg[5], 3) if agg[5] is not None else None,
+            "total_commands_issued": total_commands_passed + total_commands_failed,
             "distinct_badges_seen": distinct_badges,
             "module_stats": module_stats,
             "best_hexpansion": best,
             "worst_hexpansion": worst,
+            "busiest_hexpansion": busiest,
         }
 
 
