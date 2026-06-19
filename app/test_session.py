@@ -11,6 +11,8 @@ def _is_cancel(event):
 
 
 class TestSession:
+    __test__ = False  # not a pytest test class despite the Test* name
+
     def __init__(self, modules):
         self._items = [(m, cmd) for m in modules for cmd in m.get_capabilities()["commands"]]
         self._index = 0

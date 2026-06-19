@@ -10,7 +10,9 @@ def _make_app(modules=None):
     room_client = MagicMock()
     with patch.object(TildateamApp, "_scan"):
         a = TildateamApp(room_client=room_client)
-    a.connected_modules = modules or []
+    a.module_registry._connected_modules = {
+        m.FRIENDLY_NAME: m for m in (modules or [])
+    }
     return a
 
 
@@ -37,6 +39,7 @@ class TestTestingModeApp(unittest.TestCase):
         m = _make_module("MegaDrive", ["a"])
         a = _make_app(modules=[m])
         a._start_testing()
+        a._test_menu_select("MegaDrive", 0)
         self.assertIsNotNone(a._test_session)
 
     def test_no_network_requests_on_enter(self):
@@ -50,6 +53,7 @@ class TestTestingModeApp(unittest.TestCase):
         m = _make_module("MegaDrive", ["a"])
         a = _make_app(modules=[m])
         a._start_testing()
+        a._test_menu_select("MegaDrive", 0)
         a._test_session.state = "done"
         a.update(0)
         self.assertIsNone(a._test_session)
@@ -58,6 +62,7 @@ class TestTestingModeApp(unittest.TestCase):
         m = _make_module("MegaDrive", ["a"])
         a = _make_app(modules=[m])
         a._start_testing()
+        a._test_menu_select("MegaDrive", 0)
         a._test_session.state = "done"
         a.update(0)   # clears test_session
         a.update(0)   # enters else branch → _ensure_menu

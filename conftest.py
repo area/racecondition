@@ -14,8 +14,16 @@ the standard library time module.
 import sys
 import types
 import time
+import hashlib
+import binascii
 from pathlib import Path
 from unittest.mock import MagicMock
+
+# ── MicroPython stdlib aliases ──────────────────────────────────────────────
+# uhashlib / ubinascii are the MicroPython names for the CPython stdlib
+# modules; their APIs match closely enough for the app's use.
+sys.modules.setdefault("uhashlib", hashlib)
+sys.modules.setdefault("ubinascii", binascii)
 
 # ── MicroPython time shims ──────────────────────────────────────────────────
 if not hasattr(time, "ticks_ms"):

@@ -3,7 +3,7 @@ from .base import HexpansionModule, CommandStatus
 
 SIX_BUTTON_ONLY = {"x", "y", "z", "mode"}
 
-THREE_BUTTON_COMMANDS = ["start", "up", "down", "left", "right",  "b", "c"]
+THREE_BUTTON_COMMANDS = ["start", "up", "down", "left", "right", "a", "b", "c"]
 SIX_BUTTON_COMMANDS = THREE_BUTTON_COMMANDS + [
     "x",
     "y",
