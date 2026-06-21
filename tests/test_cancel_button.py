@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import app.app as _app_module
-from app.app import TildateamApp, CANCEL_HOLD_MS
+from app.app import RaceConditionApp, CANCEL_HOLD_MS
 
 
 def _make_cancel_event():
@@ -28,8 +28,8 @@ def _make_app():
         "badge_count": 1,
         "colour": "red",
     }
-    with patch.object(TildateamApp, "_scan"):
-        return TildateamApp(room_client=room_client)
+    with patch.object(RaceConditionApp, "_scan"):
+        return RaceConditionApp(room_client=room_client)
 
 
 def _put_in_round(app, module=None):

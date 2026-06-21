@@ -1,15 +1,15 @@
-"""App-level integration tests for testing mode — verifies TildateamApp delegates
+"""App-level integration tests for testing mode — verifies RaceConditionApp delegates
 correctly to TestSession. Unit tests for TestSession itself live in test_test_session.py."""
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app.app import TildateamApp
+from app.app import RaceConditionApp
 
 
 def _make_app(modules=None):
     room_client = MagicMock()
-    with patch.object(TildateamApp, "_scan"):
-        a = TildateamApp(room_client=room_client)
+    with patch.object(RaceConditionApp, "_scan"):
+        a = RaceConditionApp(room_client=room_client)
     a.module_registry._connected_modules = {
         m.FRIENDLY_NAME: m for m in (modules or [])
     }

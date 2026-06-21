@@ -2,7 +2,7 @@ import json
 import time
 
 
-DEFAULT_SERVER_URL = "http://192.168.1.176:8000"
+DEFAULT_SERVER_URL = "https://racecondition.area.io"
 REQUEST_TIMEOUT_SECONDS = 3
 
 

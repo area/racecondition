@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Tildateam</title>
+    <title>Race Condition</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -126,6 +126,7 @@
             color: var(--silk-mid);
             margin: 0;
         }
+        .hero-text .tagline a { color: var(--copper); text-decoration: none; }
         .how-to-play {
             background: var(--surface);
             border: 1px solid var(--trace);
@@ -479,7 +480,7 @@
 <body>
 
 <nav>
-    <a class="nav-brand" href="#about">Tildateam</a>
+    <a class="nav-brand" href="#about">Race Condition</a>
     <div class="nav-links">
         <a href="#about">About</a>
         <a href="#hexpansions">Hexpansions</a>
@@ -493,8 +494,9 @@
 <div class="section-wrap" id="about">
     <div class="about-grid">
         <div class="hero-text">
-            <h1>SpaceTeam<br>for Tildagon</h1>
-            <p class="tagline">A cooperative game for 2-6 players, played on the Tildagon (and hexpansions). Each badge shows commands meant for someone else. Calmly and clearly tell your teammates what to do, and successfully carry out as many commands as you can before time runs out.</p>
+            <h1>Race Condition<br>for Tildagon</h1>
+            <p class="tagline">Race Condition is a love letter to <a href="https://en.wikipedia.org/wiki/Spaceteam">Spaceteam</a> through <a href="https://emfcamp.org/">EMFCamp</a>-tinted glasses. It is a cooperative game for 2-6 players, played on the Tildagon (and hexpansions). Each badge shows commands meant for someone else. Calmly and clearly tell your teammates what to do, and successfully carry out as many commands as you can before time runs out.</p>
+            <p class="tagline" style="margin-top: 16px;">For a slightly more in-depth explanation about where and how this came from, check the <a href="/about">about page</a>.</p>
         </div>
         <div class="how-to-play">
             <h3>How to play</h3>
@@ -509,11 +511,11 @@
                 </li>
                 <li>
                     <span class="step-num">3</span>
-                    <span>Your badge shows commands for <em>other</em> colours: "Green: press Button A". Communicate that instruction to the correct player while everyone else is doing the same in, presumably, a calm and orderly fashion.</span>
+                    <span>Your badge shows commands for <em>other</em> colours: "Green: press Button A on the Tildagon". Communicate that instruction to the correct player while everyone else is doing the same in, presumably, a calm and orderly fashion.</span>
                 </li>
                 <li>
                     <span class="step-num">4</span>
-                    <span>Carry out the command you're told to by a teammate. Complete it and your teammate gets a new command.</span>
+                    <span>Simultaneously, carry out the command you're being told to by a teammate. Complete it and your teammate gets a new command.</span>
                 </li>
                 <li>
                     <span class="step-num">5</span>
@@ -653,7 +655,7 @@
     </div>
 </div>
 
-<div class="page-footer" id="page-footer">Tildateam @ EMF Camp</div>
+<div class="page-footer" id="page-footer">Race Condition @ EMF Camp</div>
 
 <script>
     function esc(v) {

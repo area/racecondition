@@ -51,7 +51,7 @@ SERVER_POLL_INTERVAL_MS = 750
 def _build_secret_id():
 	try:
 		from tildagon import HMAC
-		return HMAC.digest(HMAC.HMAC_KEY1, b"Tildateam").hex()
+		return HMAC.digest(HMAC.HMAC_KEY1, b"Race Condition").hex()
 	except Exception:
 		pass
 	try:
@@ -70,7 +70,7 @@ def _derive_public_id(secret_id):
 	return ubinascii.hexlify(h.digest()[:8]).decode()
 
 
-class TildateamApp(app.App):
+class RaceConditionApp(app.App):
 	def __init__(self, room_client=None):
 		self.button_states = Buttons(self)
 		self._secret_id = _build_secret_id()
@@ -665,3 +665,7 @@ class TildateamApp(app.App):
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.font_size = 9
 		ctx.move_to(0, 80).text("any key to go back")
+
+
+# Entry point discovered by the Tildagon app loader when publishing.
+__app_export__ = RaceConditionApp

@@ -60,7 +60,7 @@ for _name, _stub in [
 # points at the real app/ directory.  Python's import system will find all
 # app.* submodules there without ever running app/__init__.py.
 # The stub also exposes a no-op App base class so that app/app.py's
-# `class TildateamApp(app.App)` resolves without error.
+# `class RaceConditionApp(app.App)` resolves without error.
 
 class _App:
     """No-op stand-in for the Tildagon framework's app.App."""

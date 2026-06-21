@@ -1,0 +1,13 @@
+[app]
+name = "Race Condition"
+category = "Games"
+
+[entry]
+class = "RaceConditionApp"
+
+[metadata]
+author = "Alex Rea"
+license = "MIT"
+url = "https://github.com/area/racecondition"
+description = "Frantic co-op command game for Tildagon badges. Shout orders, hit buttons and beat the clock together using your hexpansions."
+version = 1

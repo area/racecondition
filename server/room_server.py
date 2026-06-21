@@ -26,6 +26,7 @@ if not _ADMIN_PASSWORD:
 SCRIPT_DIR = Path(__file__).resolve().parent
 ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
 INDEX_HTML_PATH = SCRIPT_DIR / "index.html"
+ABOUT_HTML_PATH = SCRIPT_DIR / "about.html"
 HEXPANSIONS_HTML_PATH = SCRIPT_DIR / "hexpansions.html"
 LEADERBOARD_HTML_PATH = SCRIPT_DIR / "leaderboard.html"
 REGISTER_HTML_PATH = SCRIPT_DIR / "register.html"
@@ -123,6 +124,10 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
             if not self._require_admin_auth():
                 return
             self._send_html(200, _load_html(ADMIN_HTML_PATH, "Admin page"))
+            return
+
+        if self.path == "/about":
+            self._send_html(200, _load_html(ABOUT_HTML_PATH, "About page"))
             return
 
         if self.path == "/hexpansions":
@@ -272,7 +277,7 @@ class RoomRequestHandler(BaseHTTPRequestHandler):
 
 def main():
     server = ThreadingHTTPServer((HOST, PORT), RoomRequestHandler)
-    print("Tildateam room server listening on {}:{}".format(HOST, PORT))
+    print("Race Condition room server listening on {}:{}".format(HOST, PORT))
     server.serve_forever()
 
 

@@ -1,0 +1,31 @@
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+
+# Single machine, single volume — never let two deploys race.
+concurrency: deploy-server
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      # Only the server is deployed by this workflow, so gate on its tests.
+      # Badge-app tests belong to the client release track.
+      - run: python -m pytest server -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

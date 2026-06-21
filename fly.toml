@@ -1,0 +1,28 @@
+# Fly.io deployment for the Race Condition room server.
+#
+# IMPORTANT: this app keeps room state in memory and persists to a single
+# SQLite file. It must run as exactly ONE always-on machine — no horizontal
+# scaling (multiple writers corrupt the DB) and no auto-stop (a stopped
+# machine drops every live room). The settings below enforce that.
+app = "racecondition"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+# DB path is set via RACECONDITION_DB in server/Dockerfile -> /data/racecondition.db.
+[[mounts]]
+  source = "racecondition_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"

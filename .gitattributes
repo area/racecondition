@@ -1,0 +1,14 @@
+# Keep the published app tarball (git archive of the release tag) app-only.
+# Everything below is server, tooling, or dev-only and is excluded.
+server/                export-ignore
+tests/                 export-ignore
+scripts/               export-ignore
+hexpansion-firmwares/  export-ignore
+docs/                  export-ignore
+.github/               export-ignore
+conftest.py            export-ignore
+pyproject.toml         export-ignore
+fly.toml               export-ignore
+.dockerignore          export-ignore
+.gitmodules            export-ignore
+.gitattributes         export-ignore

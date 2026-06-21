@@ -1,0 +1,6 @@
+# The image only needs server/ (see server/Dockerfile). Exclude everything
+# else so the build context stays tiny (no .git, no hexpansion-firmwares submodule).
+*
+!server
+server/**/__pycache__
+server/racecondition.db*

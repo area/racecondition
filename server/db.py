@@ -1,7 +1,8 @@
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "tildateam.db"
+DB_PATH = Path(os.environ.get("RACECONDITION_DB") or Path(__file__).resolve().parent / "racecondition.db")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS usernames (

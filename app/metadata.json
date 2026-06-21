@@ -1,6 +1,6 @@
 {
-  "callable": "TildateamApp",
-  "name": "Tildateam",
+  "callable": "RaceConditionApp",
+  "name": "Race Condition",
   "category": "unknown",
   "hidden": false,
   "path": "apps.spaceteam.app"

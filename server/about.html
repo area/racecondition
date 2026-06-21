@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>About - Race Condition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:         #0d1c0c;
+            --surface:    #132211;
+            --trace:      #1e3a1a;
+            --silk:       #c8e6b4;
+            --silk-mid:   rgba(200, 230, 180, 0.68);
+            --silk-dim:   rgba(200, 230, 180, 0.38);
+            --copper:     #c8793a;
+            --copper-bg:  rgba(200, 121, 58, 0.1);
+            --led-green:  #22c55e;
+            --led-amber:  #f59e0b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--silk);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px),
+                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px);
+            background-size: 24px 42px;
+            background-position: 0 0, 12px 21px;
+        }
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(13, 28, 12, 0.96);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--trace);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            height: 52px;
+        }
+        .nav-brand {
+            font-family: "Space Mono", monospace;
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 0.14em;
+            text-decoration: none;
+            color: var(--copper);
+            text-transform: uppercase;
+        }
+        .nav-back {
+            font-size: 12px;
+            font-family: "IBM Plex Mono", monospace;
+            color: var(--silk-dim);
+            text-decoration: none;
+            transition: color 0.12s;
+        }
+        .nav-back:hover { color: var(--silk-mid); }
+
+        .page {
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 52px 24px 72px;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-family: "Space Mono", monospace;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--silk);
+        }
+        .lead {
+            font-size: 16px;
+            line-height: 1.7;
+            color: var(--silk-mid);
+            margin: 0 0 48px;
+        }
+        h2 {
+            font-family: "Space Mono", monospace;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--copper);
+            margin: 48px 0 14px;
+            padding-top: 48px;
+            border-top: 1px solid var(--trace);
+        }
+        h2:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+        p { font-size: 15px; line-height: 1.75; margin: 0 0 16px; color: var(--silk-mid); }
+        p:last-child { margin-bottom: 0; }
+        a { color: var(--copper); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        strong { color: var(--silk); }
+        em { color: var(--silk-mid); }
+
+        blockquote {
+            margin: 24px 0;
+            padding: 12px 18px;
+            border-left: 3px solid var(--copper);
+            font-family: "IBM Plex Mono", monospace;
+            font-style: italic;
+            font-size: 14px;
+            line-height: 1.65;
+            color: var(--silk-mid);
+        }
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-left: 3px solid var(--copper);
+            border-radius: 3px;
+            padding: 14px 18px;
+            font-size: 14px;
+            line-height: 1.65;
+            margin: 24px 0;
+            color: var(--silk-mid);
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="nav-brand" href="/">Race Condition</a>
+    <a class="nav-back" href="/#about">← Back</a>
+</nav>
+
+<div class="page">
+    <h1>About Race Condition</h1>
+    <p class="lead">A cooperative shouting game for the Tildagon badge, built for EMF Camp - and a deliberate experiment in building an entire end-to-end project with an AI coding assistant.</p>
+
+    <h2>Where it came from</h2>
+    <p> For years, my go-to "we have some downtime, what now?" for a group where the ice still needs to be a bit broken has been <a href="https://spaceteam.ca/Spaceteam">Spaceteam</a>. It gets people talking and laughing, is co-operative so there's no feel-bads at the end, and doesn't last too long so even if you have to end early (because, say, the taxi has arrived), no real effort has been lost.</p>
+    <p>Race Condition is a love letter to Spaceteam. I first came up with the idea of an EMF-based version of it in 2022, where I had the lofty idea of those interested being able to build their own 'boxes' in advance of the festival with switches, dials, and so forth, and having some sort of standardised way for them to interact with each other, negotiate their capabilities and run a game. It would be a lot of effort for people to do in advance for a very specific, and what is best treated as a very casual game, though.</p>
+    <p>In 2024, the badge team announced the <a href="https://blog.emfcamp.org/2024/03/18/tildagon/">Tildagon badge</a>, which was described as</p>
+
+    <blockquote>"A reusable badge with modular components upgraded at each event, and hexpansion slots to fill with your own creations."</blockquote>
+
+    <p>which sounded <i>perfect</i> for what I wanted to do. Anyone (with a badge) would have the basic hardware required to play, and extra buttons or widgets could in principle be plugged in ad-hoc for a variety of commands. In 2024, I bought a badge, and also hunted down the <a href="https://hughrawlinson.github.io/hexpansion-registry/#megadrive-controller">SEGA Mega Drive Controller hexpansion</a> with the explicit intention of it being my main 'guinea-pig' hexpansion for a Spaceteam-like game.</p>
+
+    <p>The run-up to EMF Camp 2026 has been a bit of a whirlwind for me for various reasons, but I have been determined to get the game at least playable there - and hopefully with support for <a href="https://blog.emfcamp.org/2026/05/28/tildagon-2026-spaceagon">the new badge and official Keebdeck hexpansion</a> as well once those are available to test with. My intention for EMF 2026 is to locate as many possible hexpansions as possible and add support for them - either in the field, or afterwards for 2028. If I am very lucky and the game is actually enjoyed by others, then my hope is to maybe even receive PRs from hexpansion designers or enthusiastic players to add support for them.</p>
+
+    <p> This is absolutely only at-all possible with the decision to make the Tildagon a reusable platform. If I am able to muddle my way through this thanks to that, I cannot wait to see what the actually skilled badge developers come up with.</p>
+
+
+    <h2>Built with Claude</h2>
+    <p>Potentially controversially, this whole project - i.e. the app that runs on the badge, the server that coordinates rooms and scoring and this website, was built with a lot of help from <a href="https://claude.com/claude-code">Claude</a>.</p>
+    <p>My day job is (quite aggressively) encouraging us to get use AI as much as possible, but I have been reluctant to use it very much on the 'code generation' side of things; I have been using it for reviews (which I will say has been useful - right up until doing so was considered <a href="https://www.anthropic.com/news/fable-mythos-access">an export risk</a>), but letting it generate code felt like a step too far to do so 'blindly' on an existing codebase.</p>
+    <p> I therefore thought this project might be a good testbed. A new codebase is obviously vastly easier for experimentation. In addition, Python is certainly not my first language of choice, and I was also curious to see how helpful it could be with what is an esoteric piece of hardware.</p>
+    <p>The verdict? It definitely helped. I didn't try and 'one-shot' anything, and tried to keep it on tight leash when working on features, which came out mostly as I expected. It even found the odd bug (including one that would only manifest when three badges - one more than I'm currently able to test with - were in a game). And I must admit, I don't think I could have achieved the same results without it (in the required timescale, certainly).</p>
+    <p>I am expecting AI to be a controversial topic at EMF this year. There are projects like this, which have used it heavily. There are also projects that leave no doubt as to the <a href="https://codeberg.org/pikesley/tildagon-ai-is-good-actually">author's negative opinions</a> on the topic. I just hope that regardless, everyone can continue to carry the incredible vibes that have always permeated EMF.</p>
+</div>
+</body>
+</html>
