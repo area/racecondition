@@ -751,7 +751,7 @@
     function renderLeaderboard(entries, usernames) {
         const top = entries.filter(e => e.score > 0).slice(0, 15);
         if (!top.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty">No scores yet — play a round!</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">No scores yet - play a round!</td></tr>';
             prevKeys = new Set();
             return;
         }
@@ -798,7 +798,7 @@
         return `<div class="stat-card"><div class="stat-value">${esc(String(value))}</div><div class="stat-label">${esc(label)}</div></div>`;
     }
 
-    function pct(rate) { return rate != null ? (rate * 100).toFixed(0) + "%" : "—"; }
+    function pct(rate) { return rate != null ? (rate * 100).toFixed(0) + "%" : "-"; }
 
     function renderStats(s) {
         if (!s || s.total_games === 0) {

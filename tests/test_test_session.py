@@ -97,11 +97,13 @@ class TestTestSessionProgression(unittest.TestCase):
         self.ts.update()
         self.assertEqual(self.ts.index, 0)
 
-    def test_all_pass_reaches_summary(self):
+    def test_all_pass_drains_to_waiting(self):
+        # With a live queue, draining the queue lands in "waiting" (more commands
+        # may yet appear) rather than jumping straight to the summary.
         self.m.check_command.return_value = CommandStatus.PASSED
         for _ in range(3):
             self.ts.update()
-        self.assertEqual(self.ts.state, "summary")
+        self.assertEqual(self.ts.state, "waiting")
         self.assertEqual(self.ts.passed, 3)
 
     def test_button_routed_to_current_module(self):
@@ -148,12 +150,12 @@ class TestTestSessionSkip(unittest.TestCase):
         self.assertEqual(self.ts.index, 1)
         self.assertEqual(self.ts.skipped, 1)
 
-    def test_skip_all_reaches_summary(self):
+    def test_skip_all_drains_to_waiting(self):
         for _ in range(3):
             self.ts.on_button_down(_cancel())
             self.ts._cancel_hold_start = time.ticks_ms() - TEST_SKIP_HOLD_MS
             self.ts.update()
-        self.assertEqual(self.ts.state, "summary")
+        self.assertEqual(self.ts.state, "waiting")
         self.assertEqual(self.ts.skipped, 3)
         self.assertEqual(self.ts.passed, 0)
 
@@ -162,10 +164,15 @@ class TestTestSessionSummary(unittest.TestCase):
     def _reach_summary(self):
         m = _make_module("MegaDrive", ["a", "b", "c"])
         ts = TestSession([m])
+        # Skip every queued command; queue then drains to "waiting".
         for _ in range(3):
             ts.on_button_down(_cancel())
             ts._cancel_hold_start = time.ticks_ms() - TEST_SKIP_HOLD_MS
             ts.update()
+        # Hold cancel on the waiting screen to finish and reach the summary.
+        ts.on_button_down(_cancel())
+        ts._cancel_hold_start = time.ticks_ms() - TEST_SKIP_HOLD_MS
+        ts.update()
         return ts
 
     def test_any_button_transitions_to_done(self):
@@ -182,6 +189,57 @@ class TestTestSessionSummary(unittest.TestCase):
         ts = self._reach_summary()
         ts.update()
         self.assertEqual(ts.state, "summary")
+
+
+class TestTestSessionDynamicQueue(unittest.TestCase):
+    def test_no_commands_yet_starts_waiting(self):
+        m = _make_module("GPS", [])
+        ts = TestSession([m])
+        self.assertEqual(ts.state, "waiting")
+
+    def test_revealed_command_resumes_from_waiting(self):
+        m = _make_module("GPS", [])
+        ts = TestSession([m])
+        m.get_capabilities.return_value = {"module": "GPS", "commands": ["move 5m away"]}
+        ts.update()
+        self.assertEqual(ts.state, "command")
+        self.assertEqual(ts.current_command, "move 5m away")
+        m.set_command.assert_called_with("move 5m away")
+
+    def test_new_command_appended_mid_session(self):
+        m = _make_module("MegaDrive", ["a"])
+        ts = TestSession([m])
+        m.get_capabilities.return_value = {"module": "MegaDrive", "commands": ["a", "x"]}
+        ts.update()
+        self.assertEqual(ts.total, 2)
+        self.assertIn((m, "x"), ts._items)
+
+    def test_command_not_requeued_when_still_reported(self):
+        m = _make_module("MegaDrive", ["a"])
+        ts = TestSession([m])
+        ts.update()
+        ts.update()
+        self.assertEqual(ts.total, 1)
+
+    def test_waiting_forwards_input_to_modules(self):
+        m = _make_module("MegaDrive", [])
+        ts = TestSession([m])
+        ts.on_button_down(_btn("x", group="SegaController"))
+        m.on_button_down.assert_called_once()
+
+    def test_waiting_hold_cancel_finishes_to_summary(self):
+        m = _make_module("MegaDrive", [])
+        ts = TestSession([m])
+        ts.on_button_down(_cancel())
+        ts._cancel_hold_start = time.ticks_ms() - TEST_SKIP_HOLD_MS
+        ts.update()
+        self.assertEqual(ts.state, "summary")
+
+    def test_waiting_cancel_does_not_forward_to_modules(self):
+        m = _make_module("MegaDrive", [])
+        ts = TestSession([m])
+        ts.on_button_down(_cancel())
+        m.on_button_down.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -462,6 +462,8 @@ class RaceConditionApp(app.App):
 		if self._test_session is not None:
 			if self._test_session.state == "command":
 				self._draw_testing_command(ctx)
+			elif self._test_session.state == "waiting":
+				self._draw_testing_waiting(ctx)
 			elif self._test_session.state == "summary":
 				self._draw_testing_summary(ctx)
 		elif self.session.room_state == "waiting":
@@ -570,6 +572,20 @@ class RaceConditionApp(app.App):
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 68).text("hold cancel to skip")
+
+	def _draw_testing_waiting(self, ctx):
+		ts = self._test_session
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 18
+		ctx.move_to(0, -34).text("Waiting for")
+		ctx.move_to(0, -12).text("commands...")
+		ctx.font_size = 11
+		ctx.rgb(0.5, 0.8, 0.5)
+		ctx.move_to(0, 16).text("{} passed  {} skipped".format(ts.passed, ts.skipped))
+		ctx.font_size = 10
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 56).text("interact with hexpansion")
+		ctx.move_to(0, 70).text("hold cancel to finish")
 
 	def _draw_testing_summary(self, ctx):
 		ts = self._test_session

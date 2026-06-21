@@ -56,10 +56,6 @@ def get_capabilities(modules):
 
 
 __all__ = [
-	"HexpansionModule",
-	"MegaDriveModule",
-	"GPSModule",
-	"Tildagon2024Module",
 	"CommandStatus",
 	"ModuleRegistry",
 	"get_connected_modules",

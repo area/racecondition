@@ -1,3 +1,6 @@
+from ..hexpansion_names import get_friendly_name
+
+
 class CommandStatus:
     PASSED = "passed"
     FAILED = "failed"
@@ -5,8 +8,15 @@ class CommandStatus:
 
 
 class HexpansionModule:
+    VID = None
+    PID = None
     FRIENDLY_NAME = None
     COMMAND_OPTIONS = []
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.VID is not None and cls.PID is not None:
+            cls.FRIENDLY_NAME = get_friendly_name(cls.VID, cls.PID)
 
     # I would expect every hexpansion to need to override one, or both, of the on_button_down and
     # check_command methods. If you override on_button_down, you want to set self.last_status to CommandStatus.PASSED

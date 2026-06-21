@@ -14,15 +14,24 @@ class TestSession:
     __test__ = False  # not a pytest test class despite the Test* name
 
     def __init__(self, modules):
-        self._items = [(m, cmd) for m in modules for cmd in m.get_capabilities()["commands"]]
+        self._modules = list(modules)
+        self._items = []
+        self._queued = set()
         self._index = 0
         self._passed = 0
         self._skipped = 0
         self._cancel_hold_start = None
         self._cancel_down_event = None
-        self.state = "command" if self._items else "done"
+        self._discover()
         if self._items:
-            self._items[0][0].set_command(self._items[0][1])
+            self.state = "command"
+            self._start_current()
+        elif self._modules:
+            # Modules are connected but report no commands yet (e.g. GPS without a
+            # fix). Wait and keep re-querying rather than exiting immediately.
+            self.state = "waiting"
+        else:
+            self.state = "done"
 
     @property
     def current_module(self):
@@ -56,13 +65,21 @@ class TestSession:
             if self._cancel_hold_start is None:
                 self._cancel_hold_start = time.ticks_ms()
                 self._cancel_down_event = event
-        elif self.state == "command":
+            return
+        if self.state == "command":
             self._items[self._index][0].on_button_down(event)
+        elif self.state == "waiting":
+            # Forward input so modules can reveal more commands (e.g. pressing x/y/z
+            # on the MegaDrive controller switches it into six-button mode).
+            for module in self._modules:
+                module.on_button_down(event)
 
     def on_button_up(self, event):
-        if not _is_cancel(event) or self.state != "command":
+        if not _is_cancel(event):
             return
-        if self._cancel_hold_start is not None and self._cancel_down_event is not None:
+        if (self.state == "command"
+                and self._cancel_hold_start is not None
+                and self._cancel_down_event is not None):
             held = time.ticks_diff(time.ticks_ms(), self._cancel_hold_start)
             if held < TEST_SKIP_HOLD_MS:
                 self._items[self._index][0].on_button_down(self._cancel_down_event)
@@ -70,8 +87,28 @@ class TestSession:
         self._cancel_down_event = None
 
     def update(self):
-        if self.state != "command":
+        if self.state in ("summary", "done"):
             return
+        self._discover()
+        if self.state == "waiting":
+            self._update_waiting()
+        elif self.state == "command":
+            self._update_command()
+
+    def _update_waiting(self):
+        if self._index < len(self._items):
+            self.state = "command"
+            self._start_current()
+            return
+        # Nothing left to test right now; hold cancel to finish and see the summary.
+        if self._cancel_hold_start is not None:
+            held = time.ticks_diff(time.ticks_ms(), self._cancel_hold_start)
+            if held >= TEST_SKIP_HOLD_MS:
+                self.state = "summary"
+                self._cancel_hold_start = None
+                self._cancel_down_event = None
+
+    def _update_command(self):
         if self._cancel_hold_start is not None:
             held = time.ticks_diff(time.ticks_ms(), self._cancel_hold_start)
             if held >= TEST_SKIP_HOLD_MS:
@@ -84,10 +121,26 @@ class TestSession:
             self._passed += 1
             self._advance()
 
+    def _discover(self):
+        # Append any newly-revealed commands to the live queue, keeping order and
+        # never re-adding ones we have already seen.
+        for module in self._modules:
+            for command in module.get_capabilities()["commands"]:
+                key = (module, command)
+                if key not in self._queued:
+                    self._queued.add(key)
+                    self._items.append((module, command))
+
+    def _start_current(self):
+        module, command = self._items[self._index]
+        module.set_command(command)
+
     def _advance(self):
         self._index += 1
-        if self._index >= len(self._items):
-            self.state = "summary"
+        if self._index < len(self._items):
+            self._start_current()
+        elif self._modules:
+            # Queue drained for now, but connected modules may still reveal more.
+            self.state = "waiting"
         else:
-            m, cmd = self._items[self._index]
-            m.set_command(cmd)
+            self.state = "summary"

@@ -35,7 +35,7 @@ def _parse_nmea_rmc(line):
 
 
 class GPSModule(HexpansionModule):
-    FRIENDLY_NAME = "GPS"
+    VID, PID = 0xCAFE, 0x1295
     COMMAND_OPTIONS = ["move 5m away"]
 
     def __init__(self):

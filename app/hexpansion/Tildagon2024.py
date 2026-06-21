@@ -22,7 +22,8 @@ class Tildagon2024Module(HexpansionModule):
         self._flip_baseline = None
 
     def is_connected(self, hexpansions):
-        self._has_hexpansions = any(v["known"] for v in hexpansions.values())
+        # For now, only 2024 badges exist.
+        # Frontboard.year is being added to the firmware, so use that when available.
         return True
 
     def _safe_commands(self):

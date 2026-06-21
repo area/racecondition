@@ -1,7 +1,8 @@
 from .base import HexpansionModule, CommandStatus
 
 
-SIX_BUTTON_ONLY = {"x", "y", "z", "mode"}
+SIX_BUTTON_ONLY = {"x", "y", "z", #"mode"
+                   }
 
 THREE_BUTTON_COMMANDS = ["start", "up", "down", "left", "right", "a", "b", "c"]
 SIX_BUTTON_COMMANDS = THREE_BUTTON_COMMANDS + [
@@ -13,7 +14,7 @@ SIX_BUTTON_COMMANDS = THREE_BUTTON_COMMANDS + [
 
 
 class MegaDriveModule(HexpansionModule):
-    FRIENDLY_NAME = "MegaDrive"
+    VID, PID = 0xCAFE, 0x5E6A
     COMMAND_OPTIONS = THREE_BUTTON_COMMANDS
 
     def __init__(self):
