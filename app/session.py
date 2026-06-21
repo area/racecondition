@@ -136,7 +136,7 @@ class GameSession:
         result = {
             "assignment_id": self.expected_command_id,
             "status": status,
-            "module": self.expected_module.FRIENDLY_NAME,
+            "module": self.expected_module.friendly_name(),
             "command": self.expected_command,
         }
         self.clear_assignment()

@@ -19,15 +19,18 @@ class ModuleRegistry:
 	def scan(self, hexpansions):
 		connected = {}
 		for module_type in self.module_types:
-			friendly_name = module_type.FRIENDLY_NAME
-			module = self._connected_modules.get(friendly_name)
+			module = None
+			for m in self._connected_modules.values():
+				if type(m) is module_type:
+					module = m
+					break
 			if module is None:
 				module = module_type()
 			if module.is_connected(hexpansions):
-				connected[friendly_name] = module
+				connected[module.friendly_name()] = module
 
-		for friendly_name, module in self._connected_modules.items():
-			if friendly_name not in connected:
+		for name, module in self._connected_modules.items():
+			if name not in connected:
 				module.reset()
 
 		self._connected_modules = connected

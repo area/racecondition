@@ -258,7 +258,7 @@ class RaceConditionApp(app.App):
 			}
 		self.module_registry.scan(hexpansions)
 		self._caps_sync.mark_dirty()
-		if self.session.expected_module and self.module_registry.get_by_name(self.session.expected_module.FRIENDLY_NAME) is None:
+		if self.session.expected_module and self.module_registry.get_by_name(self.session.expected_module.friendly_name()) is None:
 			self.session.clear_assignment()
 
 	def _module_by_name(self, module_name):
@@ -282,7 +282,7 @@ class RaceConditionApp(app.App):
 			if error:
 				self.notification = Notification("Join failed: {}".format(error))
 			elif data:
-				self.session.session_token = data.get("session_token")
+				self.session.apply_poll_response(data, now_ms=time.ticks_ms(), module_lookup=self._module_by_name)
 				self._caps_sync.mark_sent(caps)
 		self._poll_server(force=True)
 
@@ -319,7 +319,7 @@ class RaceConditionApp(app.App):
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
-		items = [m.FRIENDLY_NAME for m in modules] + ["Back"]
+		items = [m.friendly_name() for m in modules] + ["Back"]
 		self.menu = Menu(
 			self,
 			items,
@@ -558,7 +558,7 @@ class RaceConditionApp(app.App):
 		ctx.move_to(0, 52).text(self.session.format_remaining())
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
-		modules = ", ".join(m.FRIENDLY_NAME for m in self.module_registry.connected_modules())
+		modules = ", ".join(m.friendly_name() for m in self.module_registry.connected_modules())
 		ctx.move_to(0, 72).text(modules or "No modules")
 
 	def _draw_testing_command(self, ctx):
@@ -567,7 +567,7 @@ class RaceConditionApp(app.App):
 		ctx.font_size = 12
 		ctx.move_to(0, -68).text("Testing {}/{}".format(ts.index + 1, ts.total))
 		ctx.font_size = 24
-		ctx.move_to(0, -30).text(ts.current_module.FRIENDLY_NAME)
+		ctx.move_to(0, -30).text(ts.current_module.friendly_name())
 		ctx.move_to(0, -4).text(ts.current_command)
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)

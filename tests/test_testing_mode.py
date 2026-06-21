@@ -11,14 +11,14 @@ def _make_app(modules=None):
     with patch.object(RaceConditionApp, "_scan"):
         a = RaceConditionApp(room_client=room_client)
     a.module_registry._connected_modules = {
-        m.FRIENDLY_NAME: m for m in (modules or [])
+        m.friendly_name(): m for m in (modules or [])
     }
     return a
 
 
 def _make_module(name, commands):
     m = MagicMock()
-    m.FRIENDLY_NAME = name
+    m.friendly_name.return_value = name
     m.COMMAND_OPTIONS = commands
     m.get_capabilities.return_value = {"module": name, "commands": commands}
     return m

@@ -53,7 +53,7 @@ class GPSModule(HexpansionModule):
     def get_capabilities(self):
         self._read_uart()
         commands = list(self.COMMAND_OPTIONS) if self._current_pos is not None else []
-        return {"module": self.FRIENDLY_NAME, "commands": commands}
+        return {"module": self.friendly_name(), "commands": commands}
 
     def set_command(self, command):
         result = super().set_command(command)

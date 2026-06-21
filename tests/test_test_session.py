@@ -8,7 +8,7 @@ from app.hexpansion.base import CommandStatus
 
 def _make_module(name, commands):
     m = MagicMock()
-    m.FRIENDLY_NAME = name
+    m.friendly_name.return_value = name
     m.COMMAND_OPTIONS = commands
     m.get_capabilities.return_value = {"module": name, "commands": list(commands)}
     m.check_command.return_value = CommandStatus.WAITING

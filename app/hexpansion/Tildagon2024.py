@@ -8,8 +8,10 @@ import imu
 
 
 class Tildagon2024Module(HexpansionModule):
-    FRIENDLY_NAME = "Tildagon 2024"
     COMMAND_OPTIONS = ["flip", "a", "b", "c", "d", "e", "f", "shake"]
+
+    def friendly_name(self):
+        return "Tildagon 2024"
 
     def __init__(self):
         self._has_hexpansions = False
@@ -24,6 +26,7 @@ class Tildagon2024Module(HexpansionModule):
     def is_connected(self, hexpansions):
         # For now, only 2024 badges exist.
         # Frontboard.year is being added to the firmware, so use that when available.
+        self._has_hexpansions = any(v["known"] for v in hexpansions.values())
         return True
 
     def _safe_commands(self):
@@ -33,7 +36,7 @@ class Tildagon2024Module(HexpansionModule):
 
     def get_capabilities(self):
         return {
-            "module": self.FRIENDLY_NAME,
+            "module": self.friendly_name(),
             "commands": self._safe_commands(),
         }
 

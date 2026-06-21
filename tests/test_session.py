@@ -70,7 +70,7 @@ class TestBuildResult(unittest.TestCase):
     def setUp(self):
         self.s = GameSession()
         self.module = MagicMock()
-        self.module.FRIENDLY_NAME = "GPS"
+        self.module.friendly_name.return_value = "GPS"
         self.s.set_assignment(self.module, "id-123", "move 5m away")
 
     def test_passed_returns_correct_dict(self):
@@ -249,7 +249,6 @@ class TestApplyPollResponseAssignment(unittest.TestCase):
         self.s.start_room(1)
         self.s.set_room_state("in-round")
         self.module = MagicMock()
-        self.module.FRIENDLY_NAME = "MegaDrive"
         self.module.COMMAND_OPTIONS = ["a", "b"]
         self.lookup = lambda name: self.module if name == "MegaDrive" else None
 
