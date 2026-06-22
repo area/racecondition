@@ -10,18 +10,19 @@ The periodic state push is disabled (_WS_PUSH_INTERVAL set very high) so that
 every websocket send has exactly one matching response — request/response
 testing without push frames racing in.
 """
+import asyncio
 import base64
 import json
 import os
 import socket
-import struct
 import time
 import unittest
 import urllib.request
 import urllib.error
 from threading import Thread
-from http.server import ThreadingHTTPServer
 from pathlib import Path
+
+from aiohttp import web
 
 import importlib.util
 
@@ -44,6 +45,7 @@ MAX_BADGES = _room_module.MAX_BADGES
 COLOURS = _room_module.COLOURS
 
 from leaderboard import SqliteLeaderboard
+import ws_frame
 
 
 def _make_room(room_id):
@@ -109,39 +111,15 @@ class WSClient:
             buf += chunk
         return buf.split(b"\r\n", 1)[0].decode()
 
-    # --- framing ---------------------------------------------------------
+    # --- framing (shared with the server via ws_frame) -------------------
     def _send(self, obj):
-        payload = json.dumps(obj).encode()
-        mask = os.urandom(4)
-        n = len(payload)
-        if n < 126:
-            hdr = struct.pack("!BB", 0x81, 0x80 | n)
-        elif n < 65536:
-            hdr = struct.pack("!BBH", 0x81, 0x80 | 126, n)
-        else:
-            hdr = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
-        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-        self.sock.sendall(hdr + mask + masked)
+        # Client→server frames must be masked.
+        self.sock.sendall(ws_frame.encode_frame(json.dumps(obj), mask=True))
 
     def _recv(self, timeout=2.0):
         self.sock.settimeout(timeout)
-        header = self._recv_exact(2)
-        length = header[1] & 0x7F
-        if length == 126:
-            length = struct.unpack("!H", self._recv_exact(2))[0]
-        elif length == 127:
-            length = struct.unpack("!Q", self._recv_exact(8))[0]
-        data = self._recv_exact(length) if length else b""
+        _opcode, data = ws_frame.read_frame(self.sock.recv)
         return json.loads(data)
-
-    def _recv_exact(self, n):
-        d = b""
-        while len(d) < n:
-            c = self.sock.recv(n - len(d))
-            if not c:
-                raise EOFError("connection closed")
-            d += c
-        return d
 
     # --- request/response helpers (push disabled, so each is 1:1) --------
     def join(self, capabilities):
@@ -195,15 +173,24 @@ class RoomServerTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Disable periodic state push so websocket exchanges are deterministic
-        # request/response pairs.
+        # request/response pairs. Restored in tearDownClass so the override can't
+        # leak into other tests sharing the interpreter.
+        cls._orig_push_interval = room_server._WS_PUSH_INTERVAL
         room_server._WS_PUSH_INTERVAL = 3600
 
         room_server.rooms.clear()
         for room_id in range(1, 6):
             room_server.rooms[room_id] = _make_room(room_id)
 
-        cls.server = ThreadingHTTPServer((TEST_HOST, TEST_PORT), room_server.RoomRequestHandler)
-        cls.server_thread = Thread(target=cls.server.serve_forever, daemon=True)
+        # Run the real aiohttp app on its own event loop in a background thread.
+        # HTTP (RoomClient/urllib) and the raw-socket WSClient both connect over
+        # real TCP, exercising the production handshake/framing end to end.
+        cls._loop = asyncio.new_event_loop()
+        cls._runner = web.AppRunner(room_server.build_app(), access_log=None)
+        cls._loop.run_until_complete(cls._runner.setup())
+        site = web.TCPSite(cls._runner, TEST_HOST, TEST_PORT)
+        cls._loop.run_until_complete(site.start())
+        cls.server_thread = Thread(target=cls._loop.run_forever, daemon=True)
         cls.server_thread.start()
         time.sleep(0.2)
 
@@ -212,8 +199,11 @@ class RoomServerTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.server.shutdown()
-        cls.server.server_close()
+        cls._loop.call_soon_threadsafe(cls._loop.stop)
+        cls.server_thread.join(timeout=2)
+        cls._loop.run_until_complete(cls._runner.cleanup())
+        cls._loop.close()
+        room_server._WS_PUSH_INTERVAL = cls._orig_push_interval
 
     def _ws(self, room_id, badge_id):
         """Open a WSClient and auto-close it at test teardown.

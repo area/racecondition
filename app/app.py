@@ -87,7 +87,6 @@ class RaceConditionApp(app.App):
 		self._qr_active = False
 		self._qr_matrix = None
 		self._caps_sync = _CapabilitiesSync()
-		self._ws_conn = None
 		self._ws_outbox = []
 		self._ws_alive = False
 		self._ws_joined = False
@@ -338,7 +337,7 @@ class RaceConditionApp(app.App):
 	def _get_qr_matrix(self):
 		if self._qr_matrix is None:
 			try:
-				from .uQR import QRCode
+				from .lib.uQR import QRCode
 				qr = QRCode()
 				qr.add_data("{}/register/{}".format(self.room_client.server_url, self._secret_id))
 				self._qr_matrix = qr.get_matrix()
@@ -387,7 +386,6 @@ class RaceConditionApp(app.App):
 		reader_task = None
 		try:
 			ws = await self.room_client.connect_ws(ws_url)
-			self._ws_conn = ws
 			self._ws_alive = True
 			self._ws_joined = False
 			print("[RC] ws connected")
@@ -417,7 +415,6 @@ class RaceConditionApp(app.App):
 					await ws.close()
 				except Exception:
 					pass
-			self._ws_conn = None
 			self._ws_outbox = []
 			print("[RC] ws session ended")
 

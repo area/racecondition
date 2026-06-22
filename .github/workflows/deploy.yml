@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest requests
+      - run: pip install pytest requests aiohttp
       # Only the server is deployed by this workflow, so gate on its tests.
       # Badge-app tests belong to the client release track.
       - run: python -m pytest server -q

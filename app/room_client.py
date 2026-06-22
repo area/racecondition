@@ -46,7 +46,7 @@ class RoomClient:
             self._import_error = str(exc)
             print("[RC:net] requests unavailable: {}".format(exc))
         try:
-            from . import aiohttp_ws as _ws  # type: ignore  # noqa: F401
+            from .lib import aiohttp_ws as _ws  # type: ignore  # noqa: F401
             print("[RC:net] aiohttp_ws loaded")
         except ImportError as exc:
             print("[RC:net] aiohttp_ws unavailable: {}".format(exc))
@@ -68,7 +68,7 @@ class RoomClient:
 
     async def connect_ws(self, ws_url):
         import asyncio
-        from .aiohttp_ws import WebSocketClient, urlparse as ws_urlparse, ClientWebSocketResponse
+        from .lib.aiohttp_ws import WebSocketClient, urlparse as ws_urlparse, ClientWebSocketResponse
 
         uri = ws_urlparse(ws_url)
         if uri is None:
@@ -81,10 +81,7 @@ class RoomClient:
         # the parameter MUST be named `ssl`. MicroPython 1.28 open_connection
         # accepts ssl=None/False and only wraps in TLS when ssl is truthy.
         async def _request(method, url, ssl, headers, is_handshake, version):
-            proto_end = url.find("://") + 3
-            host_path = url[proto_end:]
-            slash = host_path.find("/")
-            path = host_path[slash:] if slash >= 0 else "/"
+            path = uri.path or "/"
             print("[RC:net] WS open_connection {}:{}{}".format(
                 uri.hostname, uri.port, " (ssl)" if ssl else "",
             ))
@@ -106,43 +103,28 @@ class RoomClient:
     # creation — menu actions, before a game — use these HTTP helpers.
 
     def list_rooms(self):
-        return self._get("/api/rooms")
+        return self._request("/api/rooms")
 
     def create_room(self):
-        return self._post("/api/rooms/create", {})
+        return self._request("/api/rooms/create", payload={})
 
-    def _get(self, path):
+    def _request(self, path, payload=None):
+        # GET when payload is None, otherwise a JSON POST. Both share the same
+        # status handling and best-effort close.
         if not self._requests:
             return None, "Networking unavailable: {}".format(self._import_error or "requests not found")
         url = "{}{}".format(self.server_url, path)
         response = None
         try:
-            response = self._requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
-            data = response.json()
-            if response.status_code >= 400:
-                return None, data.get("error", "HTTP {}".format(response.status_code))
-            return data, None
-        except Exception as exc:
-            return None, str(exc)
-        finally:
-            if response is not None:
-                try:
-                    response.close()
-                except Exception:
-                    pass
-
-    def _post(self, path, payload):
-        if not self._requests:
-            return None, "Networking unavailable: {}".format(self._import_error or "requests not found")
-        url = "{}{}".format(self.server_url, path)
-        response = None
-        try:
-            response = self._requests.post(
-                url,
-                data=json.dumps(payload),
-                headers={"Content-Type": "application/json"},
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
+            if payload is None:
+                response = self._requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+            else:
+                response = self._requests.post(
+                    url,
+                    data=json.dumps(payload),
+                    headers={"Content-Type": "application/json"},
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
             data = response.json()
             if response.status_code >= 400:
                 return None, data.get("error", "HTTP {}".format(response.status_code))

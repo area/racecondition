@@ -1,88 +1,29 @@
 #!/usr/bin/env python3
+import asyncio
 import base64
 import hashlib
 import json
 import logging
 import os
-import re
-import socket
-import struct
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse as _urlparse, parse_qs
+
+from aiohttp import web, WSMsgType
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 log = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------ WebSocket
+#
+# The transport is a real aiohttp server: it owns the HTTP routing, the
+# WebSocket handshake, frame (de)masking, ping/pong heartbeat and connection
+# timeouts. This module only carries the game's delta-push logic on top.
 
-_WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _WS_PUSH_INTERVAL = 0.1  # seconds between periodic state pushes
-
-
-def _ws_handshake(handler):
-    key = handler.headers.get("Sec-WebSocket-Key", "")
-    accept = base64.b64encode(
-        hashlib.sha1((key + _WS_MAGIC).encode()).digest()
-    ).decode()
-    # Write the status line directly: aiohttp_ws asserts the response starts
-    # with "HTTP/1.1 101 ", but BaseHTTPRequestHandler.send_response() emits
-    # HTTP/1.0 by default.
-    response = (
-        "HTTP/1.1 101 Switching Protocols\r\n"
-        "Upgrade: websocket\r\n"
-        "Connection: Upgrade\r\n"
-        "Sec-WebSocket-Accept: {}\r\n"
-        "\r\n"
-    ).format(accept)
-    handler.wfile.write(response.encode())
-    handler.wfile.flush()
-
-
-def _recv_exact(rfile, n):
-    # Read exactly n bytes from the connection's buffered reader. Going through
-    # rfile (not the raw socket) is essential: BaseHTTPRequestHandler parses the
-    # handshake via this same buffered reader, which can read ahead past the
-    # request into its buffer; reading the raw socket would strand those bytes
-    # and desync the stream.
-    chunks = []
-    remaining = n
-    while remaining:
-        chunk = rfile.read(remaining)
-        if not chunk:
-            raise EOFError("connection closed")
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
-
-
-def _ws_read_frame(rfile, byte1=None):
-    # byte1 may be pre-read by the caller (it reads the first byte under a
-    # timeout to detect an idle connection, then reads the rest of the frame
-    # blocking). Everything after that first byte belongs to one frame.
-    if byte1 is None:
-        byte1 = _recv_exact(rfile, 1)[0]
-    elif isinstance(byte1, (bytes, bytearray)):
-        byte1 = byte1[0]
-    byte2 = _recv_exact(rfile, 1)[0]
-    opcode = byte1 & 0x0F
-    masked = bool(byte2 & 0x80)
-    length = byte2 & 0x7F
-    if length == 126:
-        length = struct.unpack("!H", _recv_exact(rfile, 2))[0]
-    elif length == 127:
-        length = struct.unpack("!Q", _recv_exact(rfile, 8))[0]
-    mask = _recv_exact(rfile, 4) if masked else None
-    data = _recv_exact(rfile, length) if length else b""
-    if mask:
-        data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
-    return opcode, data
-
-
-_WS_TIMER_JUMP_S = 1.0  # resend the round timer only when it deviates this much
+_WS_TIMER_JUMP_S = 1.0   # resend the round timer only when it deviates this much
+_WS_HEARTBEAT_S = 20.0   # aiohttp pings the badge this often; dead links get dropped
 
 
 def _ws_comparable(state):
@@ -153,20 +94,6 @@ def _ws_timer_anchor(trs, anchor, now, threshold=_WS_TIMER_JUMP_S):
     return False, anchor
 
 
-def _ws_send(wfile, data, opcode=0x01):
-    if isinstance(data, str):
-        data = data.encode()
-    length = len(data)
-    if length < 126:
-        header = struct.pack("!BB", 0x80 | opcode, length)
-    elif length < 65536:
-        header = struct.pack("!BBH", 0x80 | opcode, 126, length)
-    else:
-        header = struct.pack("!BBQ", 0x80 | opcode, 127, length)
-    wfile.write(header + data)
-    wfile.flush()
-
-
 from room import Room
 from leaderboard import SqliteLeaderboard
 from usernames import UserRegistry
@@ -204,7 +131,6 @@ def _load_html(path, label):
         return "<h1>{} unavailable</h1><p>{}</p>".format(label, exc)
 
 
-
 leaderboard = SqliteLeaderboard()
 user_registry = UserRegistry()
 rooms = {}
@@ -212,7 +138,6 @@ _rooms_lock = threading.Lock()
 
 
 def _public_id_from_secret(secret_id):
-    import hashlib
     return hashlib.sha256(secret_id.encode()).hexdigest()[:16]
 
 
@@ -228,335 +153,281 @@ def _delete_room(room_id):
         rooms.pop(room_id, None)
 
 
-class RoomRequestHandler(BaseHTTPRequestHandler):
-    def _check_admin_auth(self):
-        auth = self.headers.get("Authorization", "")
-        if not auth.startswith("Basic "):
-            return False
-        try:
-            decoded = base64.b64decode(auth[6:]).decode("utf-8")
-            _, _, password = decoded.partition(":")
-            return password == _ADMIN_PASSWORD
-        except Exception:
-            return False
+# ------------------------------------------------------------------ HTTP helpers
 
-    def _require_admin_auth(self):
-        if self._check_admin_auth():
-            return True
-        self.send_response(401)
-        self.send_header("WWW-Authenticate", 'Basic realm="SpaceTeam Admin"')
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+def _html_response(body, status=200):
+    return web.Response(text=body, status=status, content_type="text/html")
+
+
+def _check_admin_auth(request):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth[6:]).decode("utf-8")
+        _, _, password = decoded.partition(":")
+        return password == _ADMIN_PASSWORD
+    except Exception:
         return False
 
-    def _json_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length) if length else b"{}"
-        if not raw:
-            return {}
-        return json.loads(raw.decode("utf-8"))
 
-    def _send_json(self, status, payload):
-        encoded = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
+def _admin_unauthorized():
+    return web.Response(
+        status=401, headers={"WWW-Authenticate": 'Basic realm="SpaceTeam Admin"'}
+    )
 
-    def _send_html(self, status, body):
-        encoded = body.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
 
-    def do_GET(self):
-        if self.headers.get("Upgrade", "").lower() == "websocket":
-            self._handle_ws()
-            return
+# ------------------------------------------------------------------ HTTP routes
 
-        if self.path == "/":
-            self._send_html(200, _load_html(INDEX_HTML_PATH, "Index page"))
-            return
+async def index(request):
+    return _html_response(_load_html(INDEX_HTML_PATH, "Index page"))
 
-        if self.path == "/admin":
-            if not self._require_admin_auth():
-                return
-            self._send_html(200, _load_html(ADMIN_HTML_PATH, "Admin page"))
-            return
 
-        if self.path == "/about":
-            self._send_html(200, _load_html(ABOUT_HTML_PATH, "About page"))
-            return
+async def admin_page(request):
+    if not _check_admin_auth(request):
+        return _admin_unauthorized()
+    return _html_response(_load_html(ADMIN_HTML_PATH, "Admin page"))
 
-        if self.path == "/hexpansions":
-            self._send_html(200, _load_html(HEXPANSIONS_HTML_PATH, "Hexpansions page"))
-            return
 
-        if self.path == "/leaderboard":
-            self.send_response(302)
-            self.send_header("Location", "/#leaderboard")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
+async def about_page(request):
+    return _html_response(_load_html(ABOUT_HTML_PATH, "About page"))
 
-        if self.path == "/api/admin/status":
-            if not self._require_admin_auth():
-                return
-            with _rooms_lock:
-                room_list = list(rooms.values())
-            snapshots = [r.admin_snapshot() for r in room_list]
-            badge_ids = {b["badge_id"] for s in snapshots for b in s.get("badges", [])}
-            self._send_json(200, {
-                "rooms": snapshots,
-                "total_badges": sum(s["badge_count"] for s in snapshots),
-                "usernames": {bid: user_registry.get(bid) for bid in badge_ids},
+
+async def hexpansions_page(request):
+    return _html_response(_load_html(HEXPANSIONS_HTML_PATH, "Hexpansions page"))
+
+
+async def leaderboard_redirect(request):
+    raise web.HTTPFound("/#leaderboard")
+
+
+async def register_page(request):
+    return _html_response(_load_html(REGISTER_HTML_PATH, "Register page"))
+
+
+async def admin_status(request):
+    if not _check_admin_auth(request):
+        return _admin_unauthorized()
+    with _rooms_lock:
+        room_list = list(rooms.values())
+    snapshots = [r.admin_snapshot() for r in room_list]
+    badge_ids = {b["badge_id"] for s in snapshots for b in s.get("badges", [])}
+    return web.json_response({
+        "rooms": snapshots,
+        "total_badges": sum(s["badge_count"] for s in snapshots),
+        "usernames": {bid: user_registry.get(bid) for bid in badge_ids},
+    })
+
+
+async def list_rooms(request):
+    with _rooms_lock:
+        room_items = list(rooms.items())
+    result = []
+    empty_ids = []
+    for rid, r in room_items:
+        snap = r.admin_snapshot()
+        if snap["badge_count"] == 0:
+            empty_ids.append(rid)
+        else:
+            result.append({
+                "room_id": snap["room_id"],
+                "badge_count": snap["badge_count"],
+                "room_state": snap["room_state"],
             })
-            return
+    for rid in empty_ids:
+        _delete_room(rid)
+    return web.json_response({"rooms": result})
 
-        if self.path == "/api/rooms":
-            with _rooms_lock:
-                room_items = list(rooms.items())
-            result = []
-            empty_ids = []
-            for rid, r in room_items:
-                snap = r.admin_snapshot()
-                if snap["badge_count"] == 0:
-                    empty_ids.append(rid)
-                else:
-                    result.append({
-                        "room_id": snap["room_id"],
-                        "badge_count": snap["badge_count"],
-                        "room_state": snap["room_state"],
-                    })
-            for rid in empty_ids:
-                _delete_room(rid)
-            self._send_json(200, {"rooms": result})
-            return
 
-        if self.path == "/api/leaderboard":
-            entries = leaderboard.entries()
-            badge_ids = {bid for e in entries for bid in e.get("badges", {}).keys()}
-            usernames = {bid: user_registry.get(bid) for bid in badge_ids}
-            self._send_json(200, {"leaderboard": entries, "usernames": usernames})
-            return
+async def api_leaderboard(request):
+    entries = leaderboard.entries()
+    badge_ids = {bid for e in entries for bid in e.get("badges", {}).keys()}
+    usernames = {bid: user_registry.get(bid) for bid in badge_ids}
+    return web.json_response({"leaderboard": entries, "usernames": usernames})
 
-        if self.path == "/api/stats":
-            self._send_json(200, leaderboard.stats())
-            return
 
-        if re.match(r"^/register/[a-zA-Z0-9_-]+$", self.path):
-            self._send_html(200, _load_html(REGISTER_HTML_PATH, "Register page"))
-            return
+async def api_stats(request):
+    return web.json_response(leaderboard.stats())
 
-        self._send_json(404, {"error": "Not found"})
 
-    def do_POST(self):
-        if self.path == "/api/register":
+async def register(request):
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        return web.json_response({"error": "Invalid JSON: {}".format(exc)}, status=400)
+    secret_id = payload.get("secret_id")
+    username = payload.get("username")
+    if not isinstance(secret_id, str) or not secret_id:
+        return web.json_response({"error": "secret_id is required"}, status=400)
+    if not isinstance(username, str):
+        return web.json_response({"error": "username must be a string"}, status=400)
+    badge_id = _public_id_from_secret(secret_id)
+    if username.strip():
+        user_registry.set(badge_id, username)
+    else:
+        user_registry.delete(badge_id)
+    return web.json_response({"ok": True, "username": user_registry.get(badge_id)})
+
+
+async def create_room(request):
+    room = _new_room()
+    return web.json_response({"room_id": room.room_id})
+
+
+async def hurry(request):
+    # In-game actions (join/poll/start/dismiss/leave) all happen over the
+    # websocket (see ws_handler). The only POST against a room is the admin
+    # "hurry" control.
+    room_id = int(request.match_info["room_id"])
+    with _rooms_lock:
+        room = rooms.get(room_id)
+    if room is None:
+        return web.json_response({"error": "Unknown room"}, status=404)
+    if not _check_admin_auth(request):
+        return _admin_unauthorized()
+    return web.json_response(room.set_timer(5))
+
+
+# ------------------------------------------------------------------ WebSocket route
+
+async def ws_handler(request):
+    room_id = int(request.match_info["room_id"])
+    badge_id = request.query.get("badge_id")
+    if not badge_id:
+        return web.Response(status=400)
+    with _rooms_lock:
+        room = rooms.get(room_id)
+    if room is None:
+        return web.Response(status=404)
+
+    ws = web.WebSocketResponse(heartbeat=_WS_HEARTBEAT_S)
+    await ws.prepare(request)
+    badge_short = badge_id[-6:]
+    log.info("ws room=%s badge=%s connected", room_id, badge_short)
+
+    # The session token is issued in the join reply and thereafter arrives in
+    # inbound messages; the client never puts it in the URL (see
+    # RoomClient.ws_url), so it starts unset.
+    pending_caps = None
+    session_token = None
+    last_comparable = None
+    timer_anchor = None
+    joined = False
+
+    async def send_state(state, full=False):
+        nonlocal last_comparable, timer_anchor
+        now = time.monotonic()
+        trs = state.get("time_remaining_s")
+        if full:
+            payload = dict(state)
+            last_comparable = _ws_comparable(state)
+            _, timer_anchor = _ws_timer_anchor(trs, None, now)
+        else:
+            payload, last_comparable = _ws_state_delta(state, last_comparable)
+            # The round timer isn't in the comparable, so add it only on a jump
+            # (round start is covered by the full send above; this catches the
+            # admin "hurry"). The badge interpolates otherwise.
+            send_timer, timer_anchor = _ws_timer_anchor(trs, timer_anchor, now)
+            if send_timer:
+                payload["time_remaining_s"] = trs
+            if not payload:
+                return  # nothing changed — stay quiet
+        body = json.dumps(payload)
+        log.info("ws room=%s badge=%s SEND %s", room_id, badge_short, body)
+        await ws.send_str(body)
+
+    try:
+        while True:
+            # Wait up to one push interval for an inbound frame. aiohttp owns the
+            # framing, so a partial read can never desync the stream.
             try:
-                payload = self._json_body()
-            except Exception as exc:
-                self._send_json(400, {"error": "Invalid JSON: {}".format(exc)})
-                return
-            secret_id = payload.get("secret_id")
-            username = payload.get("username")
-            if not isinstance(secret_id, str) or not secret_id:
-                self._send_json(400, {"error": "secret_id is required"})
-                return
-            if not isinstance(username, str):
-                self._send_json(400, {"error": "username must be a string"})
-                return
-            badge_id = _public_id_from_secret(secret_id)
-            if username.strip():
-                user_registry.set(badge_id, username)
+                msg = await ws.receive(timeout=_WS_PUSH_INTERVAL)
+            except asyncio.TimeoutError:
+                # Idle: once joined, push a delta so the badge sees any change.
+                if joined:
+                    state = room.poll(badge_id, None, result=None, session_token=session_token)
+                    await send_state(state)
+                continue
+
+            if msg.type != WSMsgType.TEXT:
+                # CLOSE / CLOSING / CLOSED / ERROR — the connection is done.
+                # PING/PONG are handled by aiohttp's heartbeat and never arrive
+                # here as TEXT, so anything else means teardown.
+                log.info("ws room=%s badge=%s RECV <%s>", room_id, badge_short, msg.type.name)
+                break
+
+            log.info("ws room=%s badge=%s RECV %s", room_id, badge_short, msg.data)
+            m = json.loads(msg.data)
+            if "capabilities" in m:
+                pending_caps = m["capabilities"]
+            if "session_token" in m:
+                session_token = m["session_token"]
+            action = m.get("action")
+
+            if action == "leave":
+                break
+            if action == "join":
+                state = room.join(badge_id, pending_caps)
+                joined = "error" not in state
+                if state.get("session_token"):
+                    session_token = state["session_token"]
+            elif action == "start":
+                # Surface start_round's error (e.g. "Badge not in room", "Round
+                # already in progress") instead of masking it with a poll snapshot.
+                result = room.start_round(badge_id)
+                state = result if "error" in result else room.poll(
+                    badge_id, pending_caps, session_token=session_token)
+            elif action == "dismiss":
+                room.dismiss_score(badge_id)
+                state = room.poll(badge_id, pending_caps, session_token=session_token)
             else:
-                user_registry.delete(badge_id)
-            self._send_json(200, {"ok": True, "username": user_registry.get(badge_id)})
-            return
+                state = room.poll(badge_id, pending_caps,
+                                  result=m.get("result"), session_token=session_token)
+            # Explicit requests always get a full snapshot so the badge fully
+            # resyncs on any interaction.
+            await send_state(state, full=True)
 
-        if self.path == "/api/rooms/create":
-            room = _new_room()
-            self._send_json(200, {"room_id": room.room_id})
-            return
+    except Exception as exc:
+        log.info("ws room=%s badge=%s error: %s", room_id, badge_short, exc)
+    finally:
+        # Only leave if we actually joined: a connection that completes the
+        # handshake but never joins (a probe, an early drop) must not call
+        # room.leave, which would delete an otherwise-empty room out from under
+        # badges about to join it.
+        if joined:
+            response = room.leave(badge_id)
+            if response.get("badge_count", 1) == 0:
+                _delete_room(room_id)
+            log.info("ws room=%s badge=%s disconnected (left room)", room_id, badge_short)
+        else:
+            log.info("ws room=%s badge=%s disconnected (never joined)", room_id, badge_short)
+    return ws
 
-        # In-game actions (join/poll/start/dismiss/leave) all happen over the
-        # websocket (see _handle_ws). The only POST against a room is the admin
-        # "hurry" control.
-        match = re.match(r"^/api/rooms/(\d+)/hurry$", self.path)
-        if not match:
-            self._send_json(404, {"error": "Not found"})
-            return
 
-        room_id = int(match.group(1))
-        with _rooms_lock:
-            room = rooms.get(room_id)
-        if room is None:
-            self._send_json(404, {"error": "Unknown room"})
-            return
-
-        if not self._require_admin_auth():
-            return
-        self._send_json(200, room.set_timer(5))
-
-    def _handle_ws(self):
-        parsed = _urlparse(self.path)
-        match = re.match(r"^/ws/rooms/(\d+)$", parsed.path)
-        if not match:
-            self.send_response(404)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-
-        room_id = int(match.group(1))
-        qs = parse_qs(parsed.query)
-        badge_id = (qs.get("badge_id") or [None])[0]
-        session_token = (qs.get("token") or [None])[0]
-
-        if not badge_id:
-            self.send_response(400)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-
-        with _rooms_lock:
-            room = rooms.get(room_id)
-        if room is None:
-            self.send_response(404)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-
-        _ws_handshake(self)
-        badge_short = badge_id[-6:] if badge_id else "?"
-        log.info("ws room=%s badge=%s connected", room_id, badge_short)
-
-        sock = self.connection
-        rfile = self.rfile
-        pending_caps = None
-        last_comparable = [None]  # boxed so the closure can rebind it
-        timer_anchor = [None]
-
-        def send_state(state, full=False):
-            now = time.monotonic()
-            trs = state.get("time_remaining_s")
-            if full:
-                payload = dict(state)
-                last_comparable[0] = _ws_comparable(state)
-                _, timer_anchor[0] = _ws_timer_anchor(trs, None, now)
-            else:
-                payload, last_comparable[0] = _ws_state_delta(state, last_comparable[0])
-                # The round timer isn't in the comparable, so add it only on a
-                # jump (round start is covered by the full send above; this
-                # catches the admin "hurry"). The badge interpolates otherwise.
-                send_timer, timer_anchor[0] = _ws_timer_anchor(trs, timer_anchor[0], now)
-                if send_timer:
-                    payload["time_remaining_s"] = trs
-                if not payload:
-                    return  # nothing changed — stay quiet
-            body = json.dumps(payload)
-            log.info("ws room=%s badge=%s SEND %s", room_id, badge_short, body)
-            _ws_send(self.wfile, body)
-
-        joined = False
-        try:
-            while True:
-                # Block up to one push interval for the first byte of a frame.
-                # The timeout only ever fires at a frame boundary (we go blocking
-                # for the rest of the frame below), so the stream can't desync.
-                sock.settimeout(_WS_PUSH_INTERVAL)
-                try:
-                    first = rfile.read(1)
-                except socket.timeout:
-                    first = None
-                except (OSError, EOFError):
-                    break
-
-                if first is None:
-                    # No inbound frame within the interval: once joined, push a
-                    # delta so the badge sees any change (and nothing if idle).
-                    if joined:
-                        try:
-                            state = room.poll(badge_id, None,
-                                              result=None, session_token=session_token)
-                            send_state(state)
-                        except OSError:
-                            break
-                    continue
-                if not first:
-                    break  # EOF / connection closed
-
-                # Got the first byte; read the remainder of this frame blocking.
-                sock.settimeout(None)
-                try:
-                    opcode, data = _ws_read_frame(rfile, first)
-                except (OSError, EOFError):
-                    break
-
-                if opcode == 8:  # CLOSE
-                    log.info("ws room=%s badge=%s RECV <close>", room_id, badge_short)
-                    break
-                if opcode == 9:  # PING -> PONG
-                    log.info("ws room=%s badge=%s RECV <ping>", room_id, badge_short)
-                    _ws_send(self.wfile, data, opcode=0x0A)
-                    continue
-                if opcode == 1 and data:  # TEXT
-                    log.info("ws room=%s badge=%s RECV %s", room_id, badge_short, data)
-                    msg = json.loads(data)
-                    if "capabilities" in msg:
-                        pending_caps = msg["capabilities"]
-                    if "session_token" in msg:
-                        session_token = msg["session_token"]
-                    action = msg.get("action")
-
-                    if action == "leave":
-                        break
-                    if action == "join":
-                        state = room.join(badge_id, pending_caps)
-                        joined = "error" not in state
-                        if state.get("session_token"):
-                            session_token = state["session_token"]
-                    elif action == "start":
-                        # Surface start_round's error (e.g. "Badge not in room",
-                        # "Round already in progress") instead of masking it with
-                        # a normal poll snapshot.
-                        result = room.start_round(badge_id)
-                        state = result if "error" in result else room.poll(
-                            badge_id, pending_caps, session_token=session_token)
-                    elif action == "dismiss":
-                        room.dismiss_score(badge_id)
-                        state = room.poll(badge_id, pending_caps, session_token=session_token)
-                    else:
-                        state = room.poll(badge_id, pending_caps,
-                                          result=msg.get("result"), session_token=session_token)
-                    # Explicit requests always get a full snapshot so the
-                    # badge fully resyncs on any interaction.
-                    send_state(state, full=True)
-
-        except Exception as exc:
-            log.info("ws room=%s badge=%s error: %s", room_id, badge_short, exc)
-        finally:
-            # Only leave if we actually joined: a connection that completes the
-            # handshake but never joins (a probe, an early drop) must not call
-            # room.leave, which would delete an otherwise-empty room out from
-            # under badges about to join it.
-            if joined:
-                response = room.leave(badge_id)
-                if response.get("badge_count", 1) == 0:
-                    _delete_room(room_id)
-                log.info("ws room=%s badge=%s disconnected (left room)", room_id, badge_short)
-            else:
-                log.info("ws room=%s badge=%s disconnected (never joined)", room_id, badge_short)
-
-    def log_message(self, format, *args):
-        return
+def build_app():
+    app = web.Application()
+    app.add_routes([
+        web.get("/", index),
+        web.get("/admin", admin_page),
+        web.get("/about", about_page),
+        web.get("/hexpansions", hexpansions_page),
+        web.get("/leaderboard", leaderboard_redirect),
+        web.get("/api/admin/status", admin_status),
+        web.get("/api/rooms", list_rooms),
+        web.get("/api/leaderboard", api_leaderboard),
+        web.get("/api/stats", api_stats),
+        web.get(r"/register/{secret:[A-Za-z0-9_-]+}", register_page),
+        web.get(r"/ws/rooms/{room_id:\d+}", ws_handler),
+        web.post("/api/register", register),
+        web.post("/api/rooms/create", create_room),
+        web.post(r"/api/rooms/{room_id:\d+}/hurry", hurry),
+    ])
+    return app
 
 
 def main():
-    server = ThreadingHTTPServer((HOST, PORT), RoomRequestHandler)
-    print("Race Condition room server listening on {}:{}".format(HOST, PORT))
-    server.serve_forever()
+    log.info("Race Condition room server listening on %s:%s", HOST, PORT)
+    web.run_app(build_app(), host=HOST, port=PORT, access_log=None, print=None)
 
 
 if __name__ == "__main__":
