@@ -1,4 +1,6 @@
 import app
+import asyncio
+import json
 import time
 
 from machine import I2C
@@ -45,7 +47,6 @@ BADGE_COLOURS = {
 }
 
 CANCEL_HOLD_MS = 4000
-SERVER_POLL_INTERVAL_MS = 750
 
 
 def _build_secret_id():
@@ -77,7 +78,6 @@ class RaceConditionApp(app.App):
 		self.badge_id = _derive_public_id(self._secret_id)
 		self.session = GameSession()
 		self.module_registry = ModuleRegistry()
-		self._network_error_shown = False
 		self.notification = None
 		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
@@ -87,6 +87,10 @@ class RaceConditionApp(app.App):
 		self._qr_active = False
 		self._qr_matrix = None
 		self._caps_sync = _CapabilitiesSync()
+		self._ws_conn = None
+		self._ws_outbox = []
+		self._ws_alive = False
+		self._ws_joined = False
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -268,48 +272,30 @@ class RaceConditionApp(app.App):
 		if self.menu:
 			self.menu._cleanup()
 			self.menu = None
-		self._network_error_shown = False
 		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
 		self._caps_sync.mark_dirty()
-		if self.room_client.available():
-			caps = self._capabilities()
-			data, error = self.room_client.join_room(
-				self.session.room_id,
-				self.badge_id,
-				caps,
-			)
-			if error:
-				self.notification = Notification("Join failed: {}".format(error))
-			elif data:
-				self.session.apply_poll_response(data, now_ms=time.ticks_ms(), module_lookup=self._module_by_name)
-				self._caps_sync.mark_sent(caps)
-		self._poll_server(force=True)
+		self._ws_outbox = []
+		# The websocket session (background_task) joins the room and drives all
+		# in-game communication from here on; nothing else is sent over HTTP.
 
 	def _start_round(self):
-		if not self.room_client.available():
-			return
-		_, error = self.room_client.start_round(
-			self.session.room_id, self.badge_id,
-			session_token=self.session.session_token,
-		)
-		if error:
-			self.notification = Notification("Start failed: {}".format(error))
-		else:
-			self._poll_server(force=True)
+		self._queue_ws_action("start")
 
 	def _dismiss_score(self):
-		if not self.room_client.available():
+		# If the websocket is down there's no writer to drain the outbox and the
+		# action would be discarded on teardown, leaving the user stuck on the
+		# score screen. Fall back to advancing the local UI, mirroring the old
+		# offline behaviour; a reconnect will resync from the server.
+		if not self._ws_alive:
 			self.session.set_room_state("waiting")
 			return
-		_, error = self.room_client.dismiss_score(
-			self.session.room_id, self.badge_id,
-			session_token=self.session.session_token,
-		)
-		if error:
-			self.notification = Notification("Dismiss failed: {}".format(error))
-		else:
-			self._poll_server(force=True)
+		self._queue_ws_action("dismiss")
+
+	def _queue_ws_action(self, action):
+		# Button handlers run on the same asyncio loop as background_task, so a
+		# plain list is a safe outbox — the ws loop drains it on its next tick.
+		self._ws_outbox.append({"action": action})
 
 	def _start_testing(self):
 		modules = self.module_registry.connected_modules()
@@ -370,53 +356,132 @@ class RaceConditionApp(app.App):
 		tildagonos.leds.write()
 
 	def _leave_room(self):
+		# Leaving simply tears down the websocket: stop_room() flips in_game
+		# off, the ws loop exits and closes the socket, and the server drops the
+		# badge from the room in its disconnect handler.
 		self._set_leds(None)
 		self.session.badge_colour = None
-		if self.room_client.available():
-			_, error = self.room_client.leave_room(
-				self.session.room_id,
-				self.badge_id,
-				session_token=self.session.session_token,
-			)
-			if error:
-				print("[App] Leave failed: {}".format(error))
 
-	def _poll_server(self, force=False):
-		if not self.session.in_game:
-			return
+	async def background_task(self):
+		print("[RC] background_task starting")
+		while True:
+			if self.session.in_game:
+				print("[RC] ws: starting session for room {}".format(self.session.room_id))
+				await self._run_ws_session()
+				if self.session.in_game:
+					print("[RC] ws: disconnected, retrying in 2s")
+					await asyncio.sleep(2)
+			else:
+				await asyncio.sleep(0.1)
 
-		now_ms = time.ticks_ms()
-		if not force and self.session.last_poll_ms is not None:
-			if time.ticks_diff(now_ms, self.session.last_poll_ms) < SERVER_POLL_INTERVAL_MS:
-				return
-		self.session.last_poll_ms = now_ms
+	async def _run_ws_session(self):
+		# The server pushes deltas only when state changes, so it can go quiet
+		# for long stretches. We therefore split the session into two coroutines:
+		# a reader that blocks on incoming frames (never cancelled mid-frame, so
+		# the stream can't desync) and a writer that flushes queued button
+		# actions / results every tick regardless of whether the server is
+		# talking. On teardown the reader is cancelled and the socket closed.
+		ws_url = self.room_client.ws_url(self.session.room_id, self.badge_id)
+		print("[RC] ws → {}".format(ws_url))
+		ws = None
+		reader_task = None
+		try:
+			ws = await self.room_client.connect_ws(ws_url)
+			self._ws_conn = ws
+			self._ws_alive = True
+			self._ws_joined = False
+			print("[RC] ws connected")
 
-		if not self.room_client.available():
-			if not self._network_error_shown:
-				err = self.room_client._import_error or "urequests not found"
-				self.notification = Notification("No network: {}".format(err))
-				self._network_error_shown = True
-			return
+			# Join over the websocket: the server replies with our session
+			# token, colour and the initial room state.
+			caps = self._capabilities()
+			await self._ws_send_json(ws, {"action": "join", "capabilities": caps})
+			self._caps_sync.mark_sent(caps)
 
+			reader_task = asyncio.create_task(self._ws_read_loop(ws))
+			while self.session.in_game and self._ws_alive:
+				await self._flush_ws_outbox(ws)
+				await asyncio.sleep(0.1)
+		except Exception as exc:
+			print("[RC] ws error: {}".format(exc))
+		finally:
+			self._ws_alive = False
+			if reader_task is not None:
+				reader_task.cancel()
+				try:
+					await reader_task
+				except Exception:
+					pass
+			if ws is not None:
+				try:
+					await ws.close()
+				except Exception:
+					pass
+			self._ws_conn = None
+			self._ws_outbox = []
+			print("[RC] ws session ended")
+
+	async def _ws_read_loop(self, ws):
+		try:
+			while True:
+				opcode, data = await ws.ws.receive()
+				if opcode == ws.ws.CLOSE:
+					print("[RC] ws RECV <close>")
+					break
+				if not isinstance(data, str) or not data:
+					continue
+				print("[RC] ws RECV {}".format(data))
+				self._apply_ws_state(json.loads(data))
+		except asyncio.CancelledError:
+			pass
+		except Exception as exc:
+			print("[RC] ws read error: {}".format(exc))
+		finally:
+			self._ws_alive = False
+
+	async def _ws_send_json(self, ws, obj):
+		# Single choke point for outbound frames so every message is logged.
+		print("[RC] ws SEND {}".format(json.dumps(obj)))
+		await ws.send_json(obj)
+
+	async def _flush_ws_outbox(self, ws):
+		# Queued button actions (start/dismiss), then a capability update if
+		# dirty, then a pending result. The result is captured-and-cleared
+		# before awaiting the send so a result set by update() during the await
+		# is preserved for the next flush rather than dropped or double-sent.
+		while self._ws_outbox:
+			msg = self._ws_outbox.pop(0)
+			if self.session.session_token:
+				msg["session_token"] = self.session.session_token
+			await self._ws_send_json(ws, msg)
 		caps = self._caps_sync.maybe_caps(self._capabilities())
-		data, error = self.room_client.poll(
-			self.session.room_id,
-			self.badge_id,
-			caps,
-			result=self.session.pending_result,
-			session_token=self.session.session_token,
-		)
-		if error:
-			self.notification = Notification("Server error: {}".format(error))
-			return
-		if data is None:
-			return
-
 		if caps is not None:
 			self._caps_sync.mark_sent(caps)
+			await self._ws_send_json(ws, {"capabilities": caps})
+		result = self.session.pending_result
+		if result:
+			self.session.pending_result = None
+			await self._ws_send_json(ws, {
+				"result": result,
+				"session_token": self.session.session_token,
+			})
+
+	def _apply_ws_state(self, data):
+		if "error" in data:
+			print("[RC] ws ← server error: {}".format(data["error"]))
+			self.notification = Notification(data["error"])
+			# An error before we've joined this session is a fatal join failure
+			# (e.g. "Room is full" on a reconnect after being pruned): bail back
+			# to the menu rather than reconnect-looping on the same rejection. A
+			# stale session_token from a previous session is not evidence we're
+			# in the room, so we key off this session's join, not the token.
+			if not self._ws_joined:
+				self.session.stop_room()
+				self._ensure_menu()
+			return
+		self._ws_joined = True
 		if data.get("need_capabilities"):
 			self._caps_sync.mark_dirty()
-
 		new_colour = self.session.apply_poll_response(
 			data,
 			now_ms=time.ticks_ms(),
@@ -444,7 +509,6 @@ class RaceConditionApp(app.App):
 				if status in (CommandStatus.PASSED, CommandStatus.FAILED):
 					self.session.pending_result = self.session.build_result(status)
 
-			self._poll_server(force=False)
 		elif not self._qr_active:
 			self._ensure_menu()
 			if self.menu:
@@ -555,7 +619,7 @@ class RaceConditionApp(app.App):
 			ctx.rectangle(-100, 10, 200 * frac, 5).fill()
 		ctx.rgb(0, 1, 0)
 		ctx.font_size = 30
-		ctx.move_to(0, 52).text(self.session.format_remaining())
+		ctx.move_to(0, 52).text(self.session.format_remaining(time.ticks_ms()))
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		modules = ", ".join(m.friendly_name() for m in self.module_registry.connected_modules())

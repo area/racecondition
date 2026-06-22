@@ -201,10 +201,21 @@ class TestApplyPollResponse(unittest.TestCase):
         self.s.apply_poll_response(self._poll(badge_scores={"red": {"passed": 3, "failed": 1}}))
         self.assertEqual(self.s.badge_scores["red"]["passed"], 3)
 
-    def test_clears_pending_result(self):
+    def test_preserves_pending_result(self):
+        # The websocket writer owns the result lifecycle now, so applying an
+        # incoming state must NOT drop an unsent pending result.
         self.s.pending_result = {"assignment_id": "x", "status": "passed"}
         self.s.apply_poll_response(self._poll())
-        self.assertIsNone(self.s.pending_result)
+        self.assertEqual(self.s.pending_result, {"assignment_id": "x", "status": "passed"})
+
+    def test_delta_updates_only_present_fields(self):
+        self.s.badge_count = 4
+        self.s.time_remaining_s = 90
+        # A delta carrying only scores must leave the other fields untouched.
+        self.s.apply_poll_response({"scores": {"passed": 2, "failed": 1}})
+        self.assertEqual(self.s.server_scores["passed"], 2)
+        self.assertEqual(self.s.badge_count, 4)
+        self.assertEqual(self.s.time_remaining_s, 90)
 
     def test_returns_new_colour_when_changed(self):
         result = self.s.apply_poll_response(self._poll(colour="blue"))

@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """
 Integration tests for room_server.py.
-Runs the server in a background thread; uses RoomClient for all requests.
+
+Runs the server in a background thread. In-game actions (join/poll/start/
+result/dismiss/leave) go over the websocket via the WSClient helper below;
+room discovery/creation, stats and admin use plain HTTP.
+
+The periodic state push is disabled (_WS_PUSH_INTERVAL set very high) so that
+every websocket send has exactly one matching response — request/response
+testing without push frames racing in.
 """
+import base64
+import json
+import os
+import socket
+import struct
 import time
 import unittest
 import urllib.request
@@ -10,7 +22,6 @@ import urllib.error
 from threading import Thread
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-import sys
 
 import importlib.util
 
@@ -29,6 +40,8 @@ _room_spec = importlib.util.spec_from_file_location("room", Path(__file__).paren
 _room_module = importlib.util.module_from_spec(_room_spec)
 _room_spec.loader.exec_module(_room_module)
 Room = _room_module.Room
+MAX_BADGES = _room_module.MAX_BADGES
+COLOURS = _room_module.COLOURS
 
 from leaderboard import SqliteLeaderboard
 
@@ -44,11 +57,147 @@ GPS_CAPS = [{"module": "GPS", "commands": ["move 5m away"]}]
 MEGADRIVE_CAPS = [{"module": "MegaDrive", "commands": ["a", "b"]}]
 
 
+class WSHandshakeError(Exception):
+    def __init__(self, status):
+        super().__init__(status)
+        self.status = status
+
+
+def _ws_status_for(path):
+    """Open a websocket handshake for an arbitrary path; return the status line."""
+    s = socket.create_connection((TEST_HOST, TEST_PORT))
+    try:
+        key = base64.b64encode(os.urandom(16)).decode()
+        s.sendall((
+            "GET {} HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\n"
+            "Connection: Upgrade\r\nSec-WebSocket-Key: {}\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n"
+        ).format(path, TEST_HOST, key).encode())
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            buf += chunk
+        return buf.split(b"\r\n", 1)[0].decode()
+    finally:
+        s.close()
+
+
+class WSClient:
+    """Minimal websocket test client — one connection represents one badge."""
+
+    def __init__(self, room_id, badge_id):
+        self.sock = socket.create_connection((TEST_HOST, TEST_PORT))
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall((
+            "GET /ws/rooms/{}?badge_id={} HTTP/1.1\r\n"
+            "Host: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            "Sec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        ).format(room_id, badge_id, TEST_HOST, key).encode())
+        status = self._read_status_line()
+        if status != "HTTP/1.1 101 Switching Protocols":
+            self.sock.close()
+            raise WSHandshakeError(status)
+
+    def _read_status_line(self):
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            chunk = self.sock.recv(1024)
+            if not chunk:
+                break
+            buf += chunk
+        return buf.split(b"\r\n", 1)[0].decode()
+
+    # --- framing ---------------------------------------------------------
+    def _send(self, obj):
+        payload = json.dumps(obj).encode()
+        mask = os.urandom(4)
+        n = len(payload)
+        if n < 126:
+            hdr = struct.pack("!BB", 0x81, 0x80 | n)
+        elif n < 65536:
+            hdr = struct.pack("!BBH", 0x81, 0x80 | 126, n)
+        else:
+            hdr = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
+        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        self.sock.sendall(hdr + mask + masked)
+
+    def _recv(self, timeout=2.0):
+        self.sock.settimeout(timeout)
+        header = self._recv_exact(2)
+        length = header[1] & 0x7F
+        if length == 126:
+            length = struct.unpack("!H", self._recv_exact(2))[0]
+        elif length == 127:
+            length = struct.unpack("!Q", self._recv_exact(8))[0]
+        data = self._recv_exact(length) if length else b""
+        return json.loads(data)
+
+    def _recv_exact(self, n):
+        d = b""
+        while len(d) < n:
+            c = self.sock.recv(n - len(d))
+            if not c:
+                raise EOFError("connection closed")
+            d += c
+        return d
+
+    # --- request/response helpers (push disabled, so each is 1:1) --------
+    def join(self, capabilities):
+        self._send({"action": "join", "capabilities": capabilities})
+        return self._recv()
+
+    def poll(self, capabilities=None, result=None, session_token=None):
+        msg = {}
+        if capabilities is not None:
+            msg["capabilities"] = capabilities
+        if result is not None:
+            msg["result"] = result
+        if session_token is not None:
+            msg["session_token"] = session_token
+        self._send(msg)
+        return self._recv()
+
+    def start(self, session_token=None):
+        msg = {"action": "start"}
+        if session_token is not None:
+            msg["session_token"] = session_token
+        self._send(msg)
+        return self._recv()
+
+    def dismiss(self, session_token=None):
+        msg = {"action": "dismiss"}
+        if session_token is not None:
+            msg["session_token"] = session_token
+        self._send(msg)
+        return self._recv()
+
+    def close(self):
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+def _wait_until(predicate, timeout=2.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return predicate()
+
+
 class RoomServerTestCase(unittest.TestCase):
-    """Integration tests: real HTTP, real client, real server."""
+    """Integration tests: real HTTP + real websocket against a live server."""
 
     @classmethod
     def setUpClass(cls):
+        # Disable periodic state push so websocket exchanges are deterministic
+        # request/response pairs.
+        room_server._WS_PUSH_INTERVAL = 3600
+
         room_server.rooms.clear()
         for room_id in range(1, 6):
             room_server.rooms[room_id] = _make_room(room_id)
@@ -66,17 +215,27 @@ class RoomServerTestCase(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
 
+    def _ws(self, room_id, badge_id):
+        """Open a WSClient and auto-close it at test teardown.
+
+        Ensures the room exists first — closing a websocket now deletes the
+        room when its last badge leaves, so rooms don't persist across tests.
+        """
+        if room_id not in room_server.rooms:
+            room_server.rooms[room_id] = _make_room(room_id)
+        c = WSClient(room_id, badge_id)
+        self.addCleanup(c.close)
+        return c
+
     def _get_json(self, path):
         url = BASE_URL + path
         with urllib.request.urlopen(url) as resp:
-            import json
             content = resp.read().decode("utf-8")
             if resp.headers.get("Content-Type", "").startswith("application/json"):
                 return json.loads(content), resp.code
             return content, resp.code
 
     def _admin_get_json(self, path):
-        import base64, json
         url = BASE_URL + path
         creds = base64.b64encode(("admin:" + room_server._ADMIN_PASSWORD).encode()).decode()
         req = urllib.request.Request(url, headers={"Authorization": "Basic " + creds})
@@ -89,237 +248,204 @@ class RoomServerTestCase(unittest.TestCase):
     # ------------------------------------------------------------------ join
 
     def test_join_room_full_returns_error(self):
-        from room import MAX_BADGES
         room_server.rooms[99] = _make_room(99)
+        conns = []
         try:
             for i in range(MAX_BADGES):
-                data, error = self.client.join_room(99, "badge-full-{}".format(i), GPS_CAPS)
-                self.assertIsNone(error)
-            data, error = self.client.join_room(99, "badge-overflow", GPS_CAPS)
-            self.assertIsNone(data)
-            self.assertIsNotNone(error)
+                c = WSClient(99, "badge-full-{}".format(i))
+                conns.append(c)
+                state = c.join(GPS_CAPS)
+                self.assertNotIn("error", state)
+            overflow = WSClient(99, "badge-overflow")
+            conns.append(overflow)
+            state = overflow.join(GPS_CAPS)
+            self.assertIn("error", state)
         finally:
+            for c in conns:
+                c.close()
             room_server.rooms.pop(99, None)
 
     def test_join_returns_expected_fields(self):
-        data, error = self.client.join_room(1, "badge-join", GPS_CAPS)
-        self.assertIsNone(error)
-        self.assertEqual(data["room_id"], 1)
-        self.assertIn("assignment", data)
-        self.assertIn("display", data)
-        self.assertIn("colour", data)
-        self.assertIn("room_state", data)
+        state = self._ws(1, "badge-join").join(GPS_CAPS)
+        self.assertNotIn("error", state)
+        self.assertEqual(state["room_id"], 1)
+        self.assertIn("assignment", state)
+        self.assertIn("display", state)
+        self.assertIn("colour", state)
+        self.assertIn("room_state", state)
+        self.assertIsNotNone(state["session_token"])
 
     def test_join_assigns_a_colour(self):
-        data, error = self.client.join_room(1, "badge-colour", GPS_CAPS)
-        self.assertIsNone(error)
-        from room import COLOURS
-        self.assertIn(data["colour"], COLOURS)
+        state = self._ws(1, "badge-colour").join(GPS_CAPS)
+        self.assertIn(state["colour"], COLOURS)
 
     def test_join_multiple_capabilities(self):
-        caps = GPS_CAPS + MEGADRIVE_CAPS
-        data, error = self.client.join_room(1, "badge-multicap", caps)
-        self.assertIsNone(error)
-        self.assertIsNotNone(data)
+        state = self._ws(1, "badge-multicap").join(GPS_CAPS + MEGADRIVE_CAPS)
+        self.assertNotIn("error", state)
+        self.assertFalse(state["need_capabilities"])
 
     # ------------------------------------------------------------------ poll
 
     def test_poll_after_join(self):
-        badge_id = "badge-poll"
-        self.client.join_room(1, badge_id, GPS_CAPS)
-        data, error = self.client.poll(1, badge_id, GPS_CAPS)
-        self.assertIsNone(error)
-        self.assertIn("assignment", data)
-        self.assertIn("scores", data)
+        c = self._ws(1, "badge-poll")
+        token = c.join(GPS_CAPS)["session_token"]
+        state = c.poll(GPS_CAPS, session_token=token)
+        self.assertIn("assignment", state)
+        self.assertIn("scores", state)
 
     def test_poll_assignment_is_stable(self):
-        """Same assignment should be returned on repeated polls."""
-        badge_id = "badge-stable"
-        join_data, _ = self.client.join_room(1, badge_id, GPS_CAPS)
-        poll_data, _ = self.client.poll(1, badge_id, GPS_CAPS)
+        c = self._ws(1, "badge-stable")
+        join_data = c.join(GPS_CAPS)
+        poll_data = c.poll(GPS_CAPS, session_token=join_data["session_token"])
         if join_data.get("assignment") and poll_data.get("assignment"):
             self.assertEqual(join_data["assignment"]["id"], poll_data["assignment"]["id"])
 
     def test_waiting_room_has_no_assignment(self):
-        """Badges in waiting state should not receive assignments."""
-        badge_id = "badge-waiting"
         room_server.rooms[2] = _make_room(2)
-        data, error = self.client.join_room(2, badge_id, GPS_CAPS)
-        self.assertIsNone(error)
-        self.assertEqual(data["room_state"], "waiting")
-        self.assertIsNone(data["assignment"])
+        state = self._ws(2, "badge-waiting").join(GPS_CAPS)
+        self.assertEqual(state["room_state"], "waiting")
+        self.assertIsNone(state["assignment"])
 
     # ------------------------------------------------------------------ start
 
     def test_start_round_transitions_to_in_round(self):
-        import json, urllib.request
         room_server.rooms[3] = _make_room(3)
-        self.client.join_room(3, "badge-start", GPS_CAPS)
-        url = BASE_URL + "/api/rooms/3/start"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"badge_id": "badge-start"}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode())
-        self.assertEqual(data["room_state"], "in-round")
+        c = self._ws(3, "badge-start")
+        token = c.join(GPS_CAPS)["session_token"]
+        state = c.start(session_token=token)
+        self.assertEqual(state["room_state"], "in-round")
 
     def test_poll_after_start_returns_assignment(self):
-        import json, urllib.request
         room_server.rooms[3] = _make_room(3)
-        self.client.join_room(3, "badge-start2", GPS_CAPS)
-        url = BASE_URL + "/api/rooms/3/start"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"badge_id": "badge-start2"}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req).close()
-        data, error = self.client.poll(3, "badge-start2", GPS_CAPS)
-        self.assertIsNone(error)
-        self.assertIsNotNone(data["assignment"])
+        c = self._ws(3, "badge-start2")
+        token = c.join(GPS_CAPS)["session_token"]
+        state = c.start(session_token=token)
+        self.assertIsNotNone(state["assignment"])
 
     # ------------------------------------------------------------------ result
 
     def test_submit_passed_increments_score(self):
         room_server.rooms[2] = _make_room(2)
-        badge_id = "badge-pass"
-        import json, urllib.request
-        join_data, _ = self.client.join_room(2, badge_id, GPS_CAPS)
-        session_token = join_data["session_token"]
-        url = BASE_URL + "/api/rooms/2/start"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"badge_id": badge_id}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req).close()
-        poll_data, _ = self.client.poll(2, badge_id, GPS_CAPS, session_token=session_token)
-        score_before = poll_data["scores"]["passed"]
-        assignment = poll_data.get("assignment")
+        c = self._ws(2, "badge-pass")
+        token = c.join(GPS_CAPS)["session_token"]
+        state = c.start(session_token=token)
+        assignment = state.get("assignment")
         if assignment is None:
             self.skipTest("No assignment issued — cannot test result submission")
-
+        before = state["scores"]["passed"]
         result = {
             "assignment_id": assignment["id"],
             "status": "passed",
             "module": assignment["module"],
             "command": assignment["command"],
         }
-        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result, session_token=session_token)
-        self.assertIsNone(error)
-        self.assertEqual(data["scores"]["passed"], score_before + 1)
+        state = c.poll(GPS_CAPS, result=result, session_token=token)
+        self.assertEqual(state["scores"]["passed"], before + 1)
 
     def test_submit_failed_increments_score(self):
         room_server.rooms[2] = _make_room(2)
-        badge_id = "badge-fail"
-        import json, urllib.request
-        join_data, _ = self.client.join_room(2, badge_id, GPS_CAPS)
-        session_token = join_data["session_token"]
-        url = BASE_URL + "/api/rooms/2/start"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"badge_id": badge_id}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req).close()
-        poll_data, _ = self.client.poll(2, badge_id, GPS_CAPS, session_token=session_token)
-        score_before = poll_data["scores"]["failed"]
-        assignment = poll_data.get("assignment")
+        c = self._ws(2, "badge-fail")
+        token = c.join(GPS_CAPS)["session_token"]
+        state = c.start(session_token=token)
+        assignment = state.get("assignment")
         if assignment is None:
             self.skipTest("No assignment issued — cannot test result submission")
-
+        before = state["scores"]["failed"]
         result = {
             "assignment_id": assignment["id"],
             "status": "failed",
             "module": assignment["module"],
             "command": assignment["command"],
         }
-        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result, session_token=session_token)
-        self.assertIsNone(error)
-        self.assertEqual(data["scores"]["failed"], score_before + 1)
+        state = c.poll(GPS_CAPS, result=result, session_token=token)
+        self.assertEqual(state["scores"]["failed"], before + 1)
 
     def test_wrong_assignment_id_is_ignored(self):
         room_server.rooms[2] = _make_room(2)
-        badge_id = "badge-wrongid"
-        import json, urllib.request
-        self.client.join_room(2, badge_id, GPS_CAPS)
-        url = BASE_URL + "/api/rooms/2/start"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"badge_id": badge_id}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req).close()
-        join_data, _ = self.client.poll(2, badge_id, GPS_CAPS)
-        score_before = join_data["scores"]["passed"]
+        c = self._ws(2, "badge-wrongid")
+        token = c.join(GPS_CAPS)["session_token"]
+        state = c.start(session_token=token)
+        before = state["scores"]["passed"]
         result = {
             "assignment_id": "does-not-exist",
             "status": "passed",
             "module": "GPS",
             "command": "move 5m away",
         }
-        data, error = self.client.poll(2, badge_id, GPS_CAPS, result=result)
-        self.assertIsNone(error)
-        self.assertEqual(data["scores"]["passed"], score_before)
+        state = c.poll(GPS_CAPS, result=result, session_token=token)
+        self.assertEqual(state["scores"]["passed"], before)
+
+    # ------------------------------------------------------------------ dismiss
+
+    def test_dismiss_after_round_returns_to_waiting(self):
+        room_server.rooms[2] = _make_room(2)
+        c = self._ws(2, "badge-dismiss")
+        token = c.join(GPS_CAPS)["session_token"]
+        c.start(session_token=token)
+        # Force the round to end via the admin "hurry" control, then wait it out.
+        creds = base64.b64encode(("admin:" + room_server._ADMIN_PASSWORD).encode()).decode()
+        req = urllib.request.Request(
+            BASE_URL + "/api/rooms/2/hurry", data=b"{}",
+            headers={"Content-Type": "application/json", "Authorization": "Basic " + creds},
+            method="POST",
+        )
+        urllib.request.urlopen(req).close()
+        # hurry leaves 5s on the clock, so the round needs a few seconds to end.
+        self.assertTrue(_wait_until(
+            lambda: c.poll(session_token=token).get("room_state") == "finished", timeout=8.0
+        ))
+        state = c.dismiss(session_token=token)
+        self.assertEqual(state["room_state"], "waiting")
 
     # ------------------------------------------------------------------ leave
 
-    def test_leave_room(self):
-        badge_id = "badge-leave"
-        self.client.join_room(3, badge_id, GPS_CAPS)
-        data, error = self.client.leave_room(3, badge_id)
-        self.assertIsNone(error)
-        self.assertEqual(data["status"], "left")
+    def test_leave_removes_badge(self):
+        room_server.rooms[3] = _make_room(3)
+        c = WSClient(3, "badge-leave")
+        c.join(GPS_CAPS)
+        self.assertTrue(_wait_until(lambda: 3 in room_server.rooms))
+        c.close()  # closing the socket is the leave
+        self.assertTrue(_wait_until(lambda: 3 not in room_server.rooms))
 
     def test_room_deleted_when_last_badge_leaves(self):
         room_server.rooms[5] = _make_room(5)
-        badge_id = "badge-reset"
-        self.client.join_room(5, badge_id, GPS_CAPS)
-        self.client.leave_room(5, badge_id)
-        self.assertNotIn(5, room_server.rooms)
-        data, error = self.client.join_room(5, badge_id, GPS_CAPS)
-        self.assertIsNone(data)
-        self.assertIsNotNone(error)
+        c = WSClient(5, "badge-reset")
+        c.join(GPS_CAPS)
+        c.close()
+        self.assertTrue(_wait_until(lambda: 5 not in room_server.rooms))
+        # A fresh connection to the now-deleted room is rejected at handshake.
+        with self.assertRaises(WSHandshakeError):
+            WSClient(5, "badge-reset")
+
+    def test_handshake_without_join_keeps_room(self):
+        # A connection that completes the handshake but never joins (a probe, an
+        # early drop) must NOT delete the room when it disconnects.
+        room_server.rooms[7] = _make_room(7)
+        self.addCleanup(lambda: room_server.rooms.pop(7, None))
+        c = WSClient(7, "badge-probe")
+        c.close()  # never sent a join frame
+        # The room must still be there after the disconnect handler runs; assert
+        # it stays present rather than racing on a never-happening deletion.
+        self.assertFalse(_wait_until(lambda: 7 not in room_server.rooms, timeout=0.5))
 
     # ------------------------------------------------------------------ errors
 
+    def test_start_without_join_returns_error(self):
+        # start_round's error must be surfaced, not masked by a poll snapshot.
+        room_server.rooms[8] = _make_room(8)
+        self.addCleanup(lambda: room_server.rooms.pop(8, None))
+        c = self._ws(8, "badge-nostart")
+        state = c.start()
+        self.assertIn("error", state)
+
+
     def test_invalid_room_id_returns_error(self):
-        data, error = self.client.join_room(999, "badge-bad", GPS_CAPS)
-        self.assertIsNone(data)
-        self.assertIsNotNone(error)
+        with self.assertRaises(WSHandshakeError):
+            WSClient(999, "badge-bad")
 
-    def test_missing_badge_id_returns_error(self):
-        import json, urllib.request, urllib.error
-        url = BASE_URL + "/api/rooms/1/join"
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"capabilities": []}).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            urllib.request.urlopen(req)
-        self.assertEqual(ctx.exception.code, 400)
-
-    def test_invalid_json_returns_400(self):
-        import urllib.request, urllib.error
-        url = BASE_URL + "/api/rooms/1/join"
-        req = urllib.request.Request(
-            url,
-            data=b"not valid json",
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            urllib.request.urlopen(req)
-        self.assertEqual(ctx.exception.code, 400)
+    def test_missing_badge_id_returns_400(self):
+        status = _ws_status_for("/ws/rooms/1")
+        self.assertIn("400", status)
 
     # ------------------------------------------------------------------ stats
 
@@ -341,9 +467,10 @@ class RoomServerTestCase(unittest.TestCase):
     def test_create_room_reuses_deleted_id(self):
         data1, _ = self.client.create_room()
         room_id = data1["room_id"]
-        self.client.join_room(room_id, "badge-reuse", GPS_CAPS)
-        self.client.leave_room(room_id, "badge-reuse")
-        self.assertNotIn(room_id, room_server.rooms)
+        c = WSClient(room_id, "badge-reuse")
+        c.join(GPS_CAPS)
+        c.close()
+        self.assertTrue(_wait_until(lambda: room_id not in room_server.rooms))
         data2, _ = self.client.create_room()
         self.assertEqual(data2["room_id"], room_id)
 
@@ -354,13 +481,13 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertIn("room_id", data)
         self.assertEqual(len(room_server.rooms), initial_count + 1)
         room_id = data["room_id"]
-        join_data, join_error = self.client.join_room(room_id, "badge-create-test", GPS_CAPS)
-        self.assertIsNone(join_error)
-        self.assertEqual(join_data["room_id"], room_id)
+        state = self._ws(room_id, "badge-create-test").join(GPS_CAPS)
+        self.assertEqual(state["room_id"], room_id)
 
     def test_list_rooms_returns_active_rooms(self):
         room_server.rooms[4] = _make_room(4)
-        self.client.join_room(4, "badge-list-test", GPS_CAPS)
+        c = self._ws(4, "badge-list-test")
+        c.join(GPS_CAPS)
         response, status = self._get_json("/api/rooms")
         self.assertEqual(status, 200)
         self.assertIn("rooms", response)
@@ -379,13 +506,117 @@ class RoomServerTestCase(unittest.TestCase):
 
     def test_multiple_badges_visible_in_admin(self):
         room_id = 4
-        room_server.rooms[room_id] = Room(room_id)
-        for i in range(2):
-            self.client.join_room(room_id, "multi-{}".format(i), GPS_CAPS)
-
+        room_server.rooms[room_id] = _make_room(room_id)
+        conns = [self._ws(room_id, "multi-{}".format(i)) for i in range(2)]
+        for c in conns:
+            c.join(GPS_CAPS)
         response, _ = self._admin_get_json("/api/admin/status")
         room_4 = next(r for r in response["rooms"] if r["room_id"] == room_id)
         self.assertGreaterEqual(room_4["badge_count"], 2)
+
+
+class WSDeltaTestCase(unittest.TestCase):
+    """Unit tests for the websocket delta projection / diff helpers."""
+
+    def _state(self, **kw):
+        base = {
+            "room_state": "in-round",
+            "time_remaining_s": 119.4,
+            "scores": {"passed": 0, "failed": 0},
+            "assignment": {"id": "a1", "module": "GPS", "command": "go",
+                           "time_remaining_s": 14.8, "timeout_s": 15.0},
+            "display": None,
+            "colour": "red",
+        }
+        base.update(kw)
+        return base
+
+    def test_first_send_is_full(self):
+        state = self._state()
+        payload, comparable = room_server._ws_state_delta(state, None)
+        self.assertEqual(payload, state)
+        self.assertIsNotNone(comparable)
+
+    def test_no_change_yields_empty_delta(self):
+        state = self._state()
+        _, comparable = room_server._ws_state_delta(state, None)
+        payload, _ = room_server._ws_state_delta(state, comparable)
+        self.assertEqual(payload, {})
+
+    def test_round_timer_never_in_generic_delta(self):
+        # The round timer is handled by _ws_timer_anchor, never the comparable.
+        _, comparable = room_server._ws_state_delta(self._state(time_remaining_s=119.4), None)
+        payload, _ = room_server._ws_state_delta(self._state(time_remaining_s=80.0), comparable)
+        self.assertNotIn("time_remaining_s", payload)
+
+    def test_timer_anchor_first_send(self):
+        send, anchor = room_server._ws_timer_anchor(120.0, None, now=1000.0)
+        self.assertTrue(send)
+        self.assertEqual(anchor, (120.0, 1000.0))
+
+    def test_timer_anchor_linear_tick_is_silent(self):
+        _, anchor = room_server._ws_timer_anchor(120.0, None, now=1000.0)
+        # 2s later the timer has dropped ~2s — exactly as predicted -> no send.
+        send, anchor2 = room_server._ws_timer_anchor(118.0, anchor, now=1002.0)
+        self.assertFalse(send)
+        self.assertEqual(anchor2, anchor)
+
+    def test_timer_anchor_jump_is_sent(self):
+        _, anchor = room_server._ws_timer_anchor(120.0, None, now=1000.0)
+        # admin "hurry": 1s later the timer is 5s, not ~119 -> jump -> send.
+        send, anchor2 = room_server._ws_timer_anchor(5.0, anchor, now=1001.0)
+        self.assertTrue(send)
+        self.assertEqual(anchor2, (5.0, 1001.0))
+
+    def test_timer_anchor_none_resets(self):
+        _, anchor = room_server._ws_timer_anchor(120.0, None, now=1000.0)
+        send, anchor2 = room_server._ws_timer_anchor(None, anchor, now=1005.0)
+        self.assertFalse(send)
+        self.assertIsNone(anchor2)
+
+    def test_assignment_timer_tick_is_silent(self):
+        # Only the assignment's internal timer changed -> dropped from compare.
+        a1 = {"id": "a1", "module": "GPS", "command": "go",
+              "time_remaining_s": 14.8, "timeout_s": 15.0}
+        a2 = dict(a1, time_remaining_s=9.2)
+        _, comparable = room_server._ws_state_delta(self._state(assignment=a1), None)
+        payload, _ = room_server._ws_state_delta(self._state(assignment=a2), comparable)
+        self.assertNotIn("assignment", payload)
+
+    def test_new_assignment_is_sent(self):
+        a1 = {"id": "a1", "module": "GPS", "command": "go",
+              "time_remaining_s": 14.8, "timeout_s": 15.0}
+        a2 = dict(a1, id="a2", command="stop")
+        _, comparable = room_server._ws_state_delta(self._state(assignment=a1), None)
+        payload, _ = room_server._ws_state_delta(self._state(assignment=a2), comparable)
+        self.assertIn("assignment", payload)
+        self.assertEqual(payload["assignment"]["id"], "a2")
+
+    def test_score_change_only_sends_scores(self):
+        _, comparable = room_server._ws_state_delta(self._state(), None)
+        payload, _ = room_server._ws_state_delta(
+            self._state(scores={"passed": 1, "failed": 0}), comparable)
+        self.assertEqual(set(payload), {"scores"})
+
+    def test_delta_detects_in_place_score_mutation(self):
+        # The room returns its live _scores dict by reference; the comparable
+        # must snapshot it, or mutating that same dict in place (as scoring
+        # does) would be invisible to the diff.
+        scores = {"passed": 0, "failed": 0}
+        _, comparable = room_server._ws_state_delta(self._state(scores=scores), None)
+        scores["passed"] = 1  # mutate the SAME object the room would
+        payload, _ = room_server._ws_state_delta(self._state(scores=scores), comparable)
+        self.assertIn("scores", payload)
+        self.assertEqual(payload["scores"]["passed"], 1)
+
+    def test_delta_detects_in_place_badge_score_mutation(self):
+        inner = {"passed": 0, "failed": 0}
+        badge_scores = {"red": inner}
+        _, comparable = room_server._ws_state_delta(self._state(badge_scores=badge_scores), None)
+        inner["passed"] = 2  # mutate nested live score dict in place
+        payload, _ = room_server._ws_state_delta(self._state(badge_scores=badge_scores), comparable)
+        self.assertIn("badge_scores", payload)
+        self.assertEqual(payload["badge_scores"]["red"]["passed"], 2)
 
 
 if __name__ == "__main__":
