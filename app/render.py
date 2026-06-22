@@ -188,16 +188,21 @@ class Renderer:
 		if badge_scores:
 			colour_names = {p["colour"]: p.get("username") or p["colour"] for p in session.players}
 			ctx.font_size = 11
-			ctx.rgb(0.5, 0.8, 0.5)
+			ctx.text_align = ctx.LEFT
 			y = 10
 			for colour in sorted(badge_scores):
 				s = badge_scores[colour]
 				marker = "*" if colour == session.badge_colour else " "
-				name = colour_names.get(colour, colour)
-				ctx.move_to(0, y).text("{}{}: {} / {}".format(
-					marker, name, s.get("passed", 0), s.get("failed", 0),
-				))
+				name_part = "{}{}".format(marker, colour_names.get(colour, colour))
+				score_part = ": {} / {}".format(s.get("passed", 0), s.get("failed", 0))
+				x = -(ctx.text_width(name_part) + ctx.text_width(score_part)) / 2
+				rgb = BADGE_COLOURS.get(colour, (20, 20, 20))
+				ctx.rgb(rgb[0] / 40, rgb[1] / 40, rgb[2] / 40)
+				ctx.move_to(x, y).text(name_part)
+				ctx.rgb(0.5, 0.8, 0.5)
+				ctx.move_to(x + ctx.text_width(name_part), y).text(score_part)
 				y += 13
+			ctx.text_align = ctx.CENTER
 
 		ctx.font_size = 14
 		if session.dismissed_count > 0:
