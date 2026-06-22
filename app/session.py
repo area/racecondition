@@ -1,3 +1,5 @@
+import time
+
 from .hexpansion import CommandStatus
 
 
@@ -20,12 +22,12 @@ class GameSession:
         self.display_timeout_s = None
         self.display_updated_ms = None
         self.pending_result = None
-        self.last_poll_ms = None
         self.score_pass = 0
         self.score_fail = 0
         self.badge_colour = None
         self.badge_count = 0
         self.time_remaining_s = None
+        self.time_remaining_updated_ms = None
         self.server_scores = {"passed": 0, "failed": 0}
         self.badge_scores = {}
         self.overall_score = None
@@ -67,11 +69,11 @@ class GameSession:
         self.clear_assignment()
         self.clear_display()
         self.pending_result = None
-        self.last_poll_ms = None
         self.score_pass = 0
         self.score_fail = 0
         self.badge_count = 0
         self.time_remaining_s = None
+        self.time_remaining_updated_ms = None
         self.server_scores = {"passed": 0, "failed": 0}
         self.overall_score = None
 
@@ -82,9 +84,9 @@ class GameSession:
         self.clear_assignment()
         self.clear_display()
         self.pending_result = None
-        self.last_poll_ms = None
         self.badge_count = 0
         self.time_remaining_s = None
+        self.time_remaining_updated_ms = None
         self.badge_scores = {}
         self.players = []
 
@@ -136,18 +138,29 @@ class GameSession:
         result = {
             "assignment_id": self.expected_command_id,
             "status": status,
-            "module": self.expected_module.FRIENDLY_NAME,
+            "module": self.expected_module.friendly_name(),
             "command": self.expected_command,
         }
         self.clear_assignment()
         return result
 
     def apply_poll_response(self, data, now_ms=None, module_lookup=None):
-        self.pending_result = None
-        self.set_room_state(data.get("room_state", self.room_state))
-        self.badge_count = data.get("badge_count", 0)
-        self.time_remaining_s = data.get("time_remaining_s")
-        self.server_scores = data.get("scores", self.server_scores)
+        # Delta-aware: the server may send only the fields that changed, so a
+        # field is updated only when its key is actually present. An absent key
+        # means "unchanged"; a present key with a null value is an explicit
+        # reset. (A full state simply carries every key.)
+        # pending_result is intentionally NOT touched here — the websocket
+        # writer owns its lifecycle (see RaceConditionApp._flush_ws_outbox), so
+        # an incoming state push can't drop a result before it has been sent.
+        if "room_state" in data:
+            self.set_room_state(data["room_state"])
+        if "badge_count" in data:
+            self.badge_count = data["badge_count"]
+        if "time_remaining_s" in data:
+            self.time_remaining_s = data["time_remaining_s"]
+            self.time_remaining_updated_ms = now_ms
+        if "scores" in data:
+            self.server_scores = data["scores"]
         if data.get("badge_scores"):
             self.badge_scores = data["badge_scores"]
         if data.get("overall_score") is not None:
@@ -166,8 +179,10 @@ class GameSession:
         if token:
             self.session_token = token
         if self.room_state == "in-round" and module_lookup is not None:
-            self._apply_assignment(data.get("assignment"), now_ms, module_lookup)
-            self.set_display(data.get("display"), now_ms=now_ms)
+            if "assignment" in data:
+                self._apply_assignment(data["assignment"], now_ms, module_lookup)
+            if "display" in data:
+                self.set_display(data["display"], now_ms=now_ms)
         colour = data.get("colour")
         if colour and colour != self.badge_colour:
             self.badge_colour = colour
@@ -198,8 +213,14 @@ class GameSession:
             now_ms=now_ms,
         )
 
-    def format_remaining(self):
+    def format_remaining(self, now_ms=None):
         if self.time_remaining_s is None:
             return "--:--"
-        t = max(0, int(self.time_remaining_s))
+        remaining = self.time_remaining_s
+        # The server only resends the round timer on a jump (round start, the
+        # admin "hurry", round end); between those we count down locally from
+        # the last value we were given.
+        if now_ms is not None and self.time_remaining_updated_ms is not None:
+            remaining -= time.ticks_diff(now_ms, self.time_remaining_updated_ms) / 1000
+        t = max(0, int(remaining))
         return "{:02d}:{:02d}".format(t // 60, t % 60)

@@ -70,7 +70,7 @@ class TestBuildResult(unittest.TestCase):
     def setUp(self):
         self.s = GameSession()
         self.module = MagicMock()
-        self.module.FRIENDLY_NAME = "GPS"
+        self.module.friendly_name.return_value = "GPS"
         self.s.set_assignment(self.module, "id-123", "move 5m away")
 
     def test_passed_returns_correct_dict(self):
@@ -201,10 +201,21 @@ class TestApplyPollResponse(unittest.TestCase):
         self.s.apply_poll_response(self._poll(badge_scores={"red": {"passed": 3, "failed": 1}}))
         self.assertEqual(self.s.badge_scores["red"]["passed"], 3)
 
-    def test_clears_pending_result(self):
+    def test_preserves_pending_result(self):
+        # The websocket writer owns the result lifecycle now, so applying an
+        # incoming state must NOT drop an unsent pending result.
         self.s.pending_result = {"assignment_id": "x", "status": "passed"}
         self.s.apply_poll_response(self._poll())
-        self.assertIsNone(self.s.pending_result)
+        self.assertEqual(self.s.pending_result, {"assignment_id": "x", "status": "passed"})
+
+    def test_delta_updates_only_present_fields(self):
+        self.s.badge_count = 4
+        self.s.time_remaining_s = 90
+        # A delta carrying only scores must leave the other fields untouched.
+        self.s.apply_poll_response({"scores": {"passed": 2, "failed": 1}})
+        self.assertEqual(self.s.server_scores["passed"], 2)
+        self.assertEqual(self.s.badge_count, 4)
+        self.assertEqual(self.s.time_remaining_s, 90)
 
     def test_returns_new_colour_when_changed(self):
         result = self.s.apply_poll_response(self._poll(colour="blue"))
@@ -249,7 +260,6 @@ class TestApplyPollResponseAssignment(unittest.TestCase):
         self.s.start_room(1)
         self.s.set_room_state("in-round")
         self.module = MagicMock()
-        self.module.FRIENDLY_NAME = "MegaDrive"
         self.module.COMMAND_OPTIONS = ["a", "b"]
         self.lookup = lambda name: self.module if name == "MegaDrive" else None
 

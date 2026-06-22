@@ -10,13 +10,11 @@ class CommandStatus:
 class HexpansionModule:
     VID = None
     PID = None
-    FRIENDLY_NAME = None
+
     COMMAND_OPTIONS = []
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls.VID is not None and cls.PID is not None:
-            cls.FRIENDLY_NAME = get_friendly_name(cls.VID, cls.PID)
+    def friendly_name(self):
+        return get_friendly_name(self.VID, self.PID)
 
     # I would expect every hexpansion to need to override one, or both, of the on_button_down and
     # check_command methods. If you override on_button_down, you want to set self.last_status to CommandStatus.PASSED
@@ -32,7 +30,7 @@ class HexpansionModule:
     # plugged in
     def get_capabilities(self):
         return {
-            "module": self.FRIENDLY_NAME,
+            "module": self.friendly_name(),
             "commands": list(self.COMMAND_OPTIONS),
         }
 
@@ -40,7 +38,7 @@ class HexpansionModule:
     # to receive that command
     def set_command(self, command):
         if command not in self.COMMAND_OPTIONS:
-            raise ValueError("Unsupported command '{}' for {}".format(command, self.FRIENDLY_NAME))
+            raise ValueError("Unsupported command '{}' for {}".format(command, self.friendly_name()))
         self.current_command = command
         self.last_status = CommandStatus.WAITING
         return self.current_command
@@ -49,7 +47,7 @@ class HexpansionModule:
     # depends on something other than being plugged in. Struggling to see what that might be, but it's here!
     def is_connected(self, hexpansions):
         for item in hexpansions.values():
-            if item["known"] and item["name"] == self.FRIENDLY_NAME:
+            if item["known"] and item["name"] == self.friendly_name():
                 return True
         return False
 
