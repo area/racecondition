@@ -1,3 +1,4 @@
+import math
 import time
 
 from app_components import clear_background
@@ -35,8 +36,28 @@ class Renderer:
 		elif app.menu:
 			app.menu.draw(ctx)
 
+		if app._test_session is not None:
+			hold = app._test_session.cancel_hold_progress(time.ticks_ms())
+		elif app.session.in_game:
+			hold = app.session.cancel_hold_progress(time.ticks_ms())
+		else:
+			hold = None
+		if hold is not None:
+			self._draw_hold_progress(ctx, hold)
+
 		if app.notification:
 			app.notification.draw(ctx)
+		ctx.restore()
+
+	def _draw_hold_progress(self, ctx, frac):
+		# Ring around the rim that fills as the cancel button is held, so the
+		# hold gives live feedback instead of silently firing at the timeout.
+		ctx.save()
+		ctx.line_width = 5
+		ctx.rgb(0.95, 0.55, 0)
+		start = -math.pi / 2
+		ctx.arc(0, 0, 116, start, start + 2 * math.pi * frac, False)
+		ctx.stroke()
 		ctx.restore()
 
 	def _instruction_fraction(self):
@@ -46,6 +67,19 @@ class Renderer:
 		elapsed_s = time.ticks_diff(time.ticks_ms(), s.display_updated_ms) / 1000
 		remaining = s.display_time_remaining_s - elapsed_s
 		return max(0.0, min(1.0, remaining / s.display_timeout_s))
+
+	def _draw_cancel_hint(self, ctx, action):
+		# Reminder placed in the top-left corner next to the physical
+		# cancel button: a pointer plus what holding it does on this
+		# screen (leave / skip / finish).
+		ctx.save()
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(-95, -75).line_to(-80, -67).line_to(-87, -60).fill()
+		ctx.text_align = ctx.LEFT
+		ctx.font_size = 10
+		ctx.move_to(-84, -58).text("Hold to")
+		ctx.move_to(-84, -46).text(action)
+		ctx.restore()
 
 	def _draw_waiting(self, ctx):
 		session = self.app.session
@@ -86,9 +120,7 @@ class Renderer:
 		else:
 			ctx.move_to(0, 30).text("Press any button")
 			ctx.move_to(0, 48).text("to start round")
-		ctx.font_size = 10
-		ctx.rgb(0.5, 0.5, 0.5)
-		ctx.move_to(0, 68).text("hold cancel to leave")
+		self._draw_cancel_hint(ctx, "leave")
 
 	def _draw_in_round(self, ctx):
 		app = self.app
@@ -114,9 +146,16 @@ class Renderer:
 			else:
 				ctx.rgb(0.8, 0.1, 0)
 			ctx.rectangle(-100, 10, 200 * frac, 5).fill()
-		ctx.rgb(0, 1, 0)
+		now = time.ticks_ms()
+		secs = session.remaining_seconds(now)
+		if secs is None or secs > 30:
+			ctx.rgb(0, 1, 0)
+		elif secs > 10:
+			ctx.rgb(0.95, 0.55, 0)
+		else:
+			ctx.rgb(1, 0, 0)
 		ctx.font_size = 30
-		ctx.move_to(0, 52).text(session.format_remaining(time.ticks_ms()))
+		ctx.move_to(0, 52).text(session.format_remaining(now))
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		modules = ", ".join(m.friendly_name() for m in app.module_registry.connected_modules())
@@ -130,9 +169,7 @@ class Renderer:
 		ctx.font_size = 24
 		ctx.move_to(0, -30).text(ts.current_module.friendly_name())
 		ctx.move_to(0, -4).text(ts.current_command)
-		ctx.font_size = 10
-		ctx.rgb(0.5, 0.5, 0.5)
-		ctx.move_to(0, 68).text("hold cancel to skip")
+		self._draw_cancel_hint(ctx, "skip")
 
 	def _draw_testing_waiting(self, ctx):
 		ts = self.app._test_session
@@ -146,7 +183,7 @@ class Renderer:
 		ctx.font_size = 10
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 56).text("interact with hexpansion")
-		ctx.move_to(0, 70).text("hold cancel to finish")
+		self._draw_cancel_hint(ctx, "finish")
 
 	def _draw_testing_summary(self, ctx):
 		ts = self.app._test_session

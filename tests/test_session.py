@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from app.session import GameSession
+from app.constants import CANCEL_HOLD_MS
 from app.hexpansion.base import CommandStatus
 import app.app as _app_module
 
@@ -128,6 +129,42 @@ class TestFormatRemaining(unittest.TestCase):
         s = GameSession()
         s.time_remaining_s = 120
         self.assertEqual(s.format_remaining(), "02:00")
+
+
+class TestRemainingSeconds(unittest.TestCase):
+    def test_none_when_unset(self):
+        self.assertIsNone(GameSession().remaining_seconds())
+
+    def test_returns_int_seconds(self):
+        s = GameSession()
+        s.time_remaining_s = 90
+        self.assertEqual(s.remaining_seconds(), 90)
+
+    def test_counts_down_locally_from_last_update(self):
+        s = GameSession()
+        s.time_remaining_s = 90
+        s.time_remaining_updated_ms = 1000
+        self.assertEqual(s.remaining_seconds(6000), 85)
+
+    def test_clamps_to_zero(self):
+        s = GameSession()
+        s.time_remaining_s = -5
+        self.assertEqual(s.remaining_seconds(), 0)
+
+
+class TestCancelHoldProgress(unittest.TestCase):
+    def test_none_when_not_holding(self):
+        self.assertIsNone(GameSession().cancel_hold_progress(1000))
+
+    def test_fraction_while_holding(self):
+        s = GameSession()
+        s.cancel_hold_start = 1000
+        self.assertAlmostEqual(s.cancel_hold_progress(1000 + CANCEL_HOLD_MS // 2), 0.5)
+
+    def test_clamps_at_one_past_threshold(self):
+        s = GameSession()
+        s.cancel_hold_start = 0
+        self.assertEqual(s.cancel_hold_progress(CANCEL_HOLD_MS * 2), 1.0)
 
 
 class TestSetDisplay(unittest.TestCase):

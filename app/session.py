@@ -1,5 +1,6 @@
 import time
 
+from .constants import CANCEL_HOLD_MS
 from .hexpansion import CommandStatus
 
 
@@ -41,6 +42,14 @@ class GameSession:
     @property
     def in_game(self):
         return self.room_state is not None
+
+    def cancel_hold_progress(self, now_ms):
+        # Fraction (0..1) of the hold-to-leave gesture completed, or None when
+        # the cancel button isn't being held. Drives the on-screen hold ring.
+        if self.cancel_hold_start is None:
+            return None
+        held = time.ticks_diff(now_ms, self.cancel_hold_start)
+        return max(0.0, min(1.0, held / CANCEL_HOLD_MS))
 
     @property
     def in_round(self):
@@ -222,14 +231,19 @@ class GameSession:
             now_ms=now_ms,
         )
 
-    def format_remaining(self, now_ms=None):
+    def remaining_seconds(self, now_ms=None):
         if self.time_remaining_s is None:
-            return "--:--"
+            return None
         remaining = self.time_remaining_s
         # The server only resends the round timer on a jump (round start, the
         # admin "hurry", round end); between those we count down locally from
         # the last value we were given.
         if now_ms is not None and self.time_remaining_updated_ms is not None:
             remaining -= time.ticks_diff(now_ms, self.time_remaining_updated_ms) / 1000
-        t = max(0, int(remaining))
+        return max(0, int(remaining))
+
+    def format_remaining(self, now_ms=None):
+        t = self.remaining_seconds(now_ms)
+        if t is None:
+            return "--:--"
         return "{:02d}:{:02d}".format(t // 60, t % 60)

@@ -15,4 +15,4 @@ BADGE_COLOURS = {
 # fails if the two drift apart.
 COLOURS = list(BADGE_COLOURS)
 
-CANCEL_HOLD_MS = 4000
+CANCEL_HOLD_MS = 2000

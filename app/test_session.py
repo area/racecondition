@@ -57,6 +57,14 @@ class TestSession:
     def skipped(self):
         return self._skipped
 
+    def cancel_hold_progress(self, now_ms):
+        # Fraction (0..1) of the hold-to-skip/finish gesture completed, or None
+        # when the cancel button isn't being held. Drives the on-screen ring.
+        if self._cancel_hold_start is None:
+            return None
+        held = time.ticks_diff(now_ms, self._cancel_hold_start)
+        return max(0.0, min(1.0, held / TEST_SKIP_HOLD_MS))
+
     def on_button_down(self, event):
         if self.state == "summary":
             self.state = "done"
