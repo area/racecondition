@@ -13,7 +13,12 @@ from leaderboard import SqliteLeaderboard
 
 STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
+# Each assignment's timeout ramps down linearly over the round, from
+# ASSIGNMENT_TIMEOUT_S at the start to ASSIGNMENT_TIMEOUT_FLOOR_S at the end, so
+# play tightens toward the finish. The value is fixed per assignment at the
+# moment it is issued (stored on the Assignment), so its countdown stays stable.
 ASSIGNMENT_TIMEOUT_S = 15
+ASSIGNMENT_TIMEOUT_FLOOR_S = 10
 # Mirror of COLOURS in app/constants.py (the canonical palette, which maps
 # these to RGB and explains why red/green are excluded). The badge runs a
 # separate runtime and the server image ships only server/, so the list is
@@ -45,6 +50,7 @@ class Assignment:
     module: str
     command: str
     issued_at: float
+    timeout_s: float
 
 
 @dataclass
@@ -246,6 +252,15 @@ class Room:
         slot = self._badges.get(badge_id)
         return slot is not None and command in slot.capabilities.get(module, ())
 
+    def _assignment_timeout(self):
+        # Linear ramp from ASSIGNMENT_TIMEOUT_S (round start) to
+        # ASSIGNMENT_TIMEOUT_FLOOR_S (round end), clamped at the floor.
+        if self._round_started_at is None:
+            return float(ASSIGNMENT_TIMEOUT_S)
+        elapsed = self._now() - self._round_started_at
+        frac = max(0.0, min(1.0, elapsed / ROUND_DURATION_S))
+        return ASSIGNMENT_TIMEOUT_S - (ASSIGNMENT_TIMEOUT_S - ASSIGNMENT_TIMEOUT_FLOOR_S) * frac
+
     def _assignment_for(self, badge_id):
         now = self._now()
         slot = self._badges.get(badge_id)
@@ -254,13 +269,13 @@ class Room:
         existing = slot.assignment
         if existing is not None:
             age = now - existing.issued_at
-            if age < ASSIGNMENT_TIMEOUT_S:
+            if age < existing.timeout_s:
                 return {
                     "id": existing.id,
                     "module": existing.module,
                     "command": existing.command,
-                    "time_remaining_s": ASSIGNMENT_TIMEOUT_S - age,
-                    "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
+                    "time_remaining_s": existing.timeout_s - age,
+                    "timeout_s": existing.timeout_s,
                 }
             log.info("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], existing.module, existing.command)
             self._scores["failed"] += 1
@@ -275,14 +290,15 @@ class Room:
         module, command = random.choice(candidates)
         assignment_id = "{}-{}".format(id(self), self._next_assignment_id)
         self._next_assignment_id += 1
+        timeout = self._assignment_timeout()
         log.info("room=%s badge=%s assigned module=%s command=%s id=%s", self.room_id, badge_id[-6:], module, command, assignment_id)
-        slot.assignment = Assignment(id=assignment_id, module=module, command=command, issued_at=now)
+        slot.assignment = Assignment(id=assignment_id, module=module, command=command, issued_at=now, timeout_s=timeout)
         return {
             "id": assignment_id,
             "module": module,
             "command": command,
-            "time_remaining_s": float(ASSIGNMENT_TIMEOUT_S),
-            "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
+            "time_remaining_s": timeout,
+            "timeout_s": timeout,
         }
 
     def _select_instruction(self, badge_id):
@@ -304,14 +320,14 @@ class Room:
                 slot.pinned_target = target_id
             else:
                 slot.pinned_target = None
-        time_remaining = max(0.0, ASSIGNMENT_TIMEOUT_S - (now - assignment.issued_at))
+        time_remaining = max(0.0, assignment.timeout_s - (now - assignment.issued_at))
         target_slot = self._badges.get(target_id)
         return {
             "module": assignment.module,
             "command": assignment.command,
             "target_colour": target_slot.colour if target_slot else None,
             "time_remaining_s": time_remaining,
-            "timeout_s": float(ASSIGNMENT_TIMEOUT_S),
+            "timeout_s": assignment.timeout_s,
         }
 
     def _apply_result(self, badge_id, result):

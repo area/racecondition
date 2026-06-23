@@ -281,5 +281,37 @@ class TestStateTransitions(unittest.TestCase):
         self.assertEqual(data["scores"]["passed"], 0)
 
 
+class TestAssignmentTimeoutRamp(unittest.TestCase):
+    def setUp(self):
+        self.room = _room(1)
+        self.token = self.room.join("badge-a", GPS_CAPS)["session_token"]
+        self.room.start_round("badge-a")
+        self.start = _room_mod.ASSIGNMENT_TIMEOUT_S
+        self.floor = _room_mod.ASSIGNMENT_TIMEOUT_FLOOR_S
+
+    def test_timeout_starts_at_max(self):
+        self.assertAlmostEqual(self.room._assignment_timeout(), self.start, places=1)
+
+    def test_timeout_at_midround_is_halfway(self):
+        self.room._round_started_at -= ROUND_DURATION_S / 2
+        self.assertAlmostEqual(self.room._assignment_timeout(), (self.start + self.floor) / 2, places=1)
+
+    def test_timeout_floors_at_round_end(self):
+        self.room._round_started_at -= ROUND_DURATION_S
+        self.assertAlmostEqual(self.room._assignment_timeout(), self.floor, places=1)
+
+    def test_timeout_never_below_floor(self):
+        self.room._round_started_at -= ROUND_DURATION_S * 2  # well past the end
+        self.assertEqual(self.room._assignment_timeout(), self.floor)
+
+    def test_issued_assignment_carries_ramped_timeout(self):
+        # Just before the round ends, a freshly issued assignment uses ~the floor.
+        self.room._round_started_at -= ROUND_DURATION_S - 1
+        self.room._badges["badge-a"].assignment = None
+        assignment = self.room.poll("badge-a", GPS_CAPS, session_token=self.token).get("assignment")
+        self.assertIsNotNone(assignment)
+        self.assertAlmostEqual(assignment["timeout_s"], self.floor, places=1)
+
+
 if __name__ == "__main__":
     unittest.main()
