@@ -1,7 +1,6 @@
 import logging
 import math
 import random
-import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -59,7 +58,6 @@ class BadgeSlot:
     last_seen: float
     colour: str
     score: dict
-    session_token: str
     last_sent_gen: int | None = None
     pinned_target: str | None = None
     assignment: Assignment | None = None
@@ -83,15 +81,17 @@ class Room:
             self._set_badge(badge_id, _normalize_capabilities(capabilities))
             return self._poll_response(badge_id)
 
-    def poll(self, badge_id, capabilities, result=None, session_token=None):
+    def poll(self, badge_id, capabilities, result=None):
         with self._lock:
             self._prune_stale()
             norm = _normalize_capabilities(capabilities) if capabilities is not None else None
             self._set_badge(badge_id, norm)
             self._check_expiry()
+            # The websocket authenticates the connection by secret_id and derives
+            # badge_id from it, so a result here provably comes from the badge it
+            # claims to be — no per-result token check is needed.
             if result is not None and self._state == "in-round":
-                if session_token == self._badges[badge_id].session_token:
-                    self._apply_result(badge_id, result)
+                self._apply_result(badge_id, result)
             return self._poll_response(badge_id)
 
     def leave(self, badge_id):
@@ -231,7 +231,6 @@ class Room:
                 last_seen=self._now(),
                 colour=colour,
                 score={"passed": 0, "failed": 0},
-                session_token=secrets.token_hex(16),
             )
             self._players_generation += 1
         else:
@@ -432,7 +431,6 @@ class Room:
             "badge_scores": {s.colour: s.score for s in self._badges.values()},
             "badge_count": len(self._badges),
             "colour": slot.colour if slot else None,
-            "session_token": slot.session_token if slot else None,
             "ready_count": len(self._ready) if self._state == "waiting" else None,
             "is_ready": (badge_id in self._ready) if self._state == "waiting" else None,
             "dismissed_count": len(self._dismissed) if self._state == "finished" else None,

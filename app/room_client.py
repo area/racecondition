@@ -60,11 +60,12 @@ class RoomClient:
         except AttributeError:
             return int(time.time() * 1000)
 
-    def ws_url(self, room_id, badge_id):
-        # The session token is issued by the server in response to the join
-        # message sent over the socket, so it isn't needed in the URL.
+    def ws_url(self, room_id):
+        # Identity is proven by the secret_id sent in the join message body, not
+        # the URL — keeping the credential out of any access logs. So the URL
+        # carries only the room id.
         base = self.server_url.replace("https://", "wss://").replace("http://", "ws://")
-        return "{}/ws/rooms/{}?badge_id={}".format(base, room_id, badge_id)
+        return "{}/ws/rooms/{}".format(base, room_id)
 
     async def connect_ws(self, ws_url):
         import asyncio

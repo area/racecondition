@@ -89,14 +89,18 @@ def _ws_status_for(path):
 class WSClient:
     """Minimal websocket test client — one connection represents one badge."""
 
-    def __init__(self, room_id, badge_id):
+    def __init__(self, room_id, secret_id):
+        # The badge authenticates by sending secret_id in its messages (see the
+        # action helpers below); the server derives the public badge_id from it.
+        # Nothing identity-related goes in the URL.
+        self.secret_id = secret_id
         self.sock = socket.create_connection((TEST_HOST, TEST_PORT))
         key = base64.b64encode(os.urandom(16)).decode()
         self.sock.sendall((
-            "GET /ws/rooms/{}?badge_id={} HTTP/1.1\r\n"
+            "GET /ws/rooms/{} HTTP/1.1\r\n"
             "Host: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             "Sec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n\r\n"
-        ).format(room_id, badge_id, TEST_HOST, key).encode())
+        ).format(room_id, TEST_HOST, key).encode())
         status = self._read_status_line()
         if status != "HTTP/1.1 101 Switching Protocols":
             self.sock.close()
@@ -123,32 +127,24 @@ class WSClient:
 
     # --- request/response helpers (push disabled, so each is 1:1) --------
     def join(self, capabilities):
-        self._send({"action": "join", "capabilities": capabilities})
+        self._send({"action": "join", "capabilities": capabilities, "secret_id": self.secret_id})
         return self._recv()
 
-    def poll(self, capabilities=None, result=None, session_token=None):
-        msg = {}
+    def poll(self, capabilities=None, result=None):
+        msg = {"secret_id": self.secret_id}
         if capabilities is not None:
             msg["capabilities"] = capabilities
         if result is not None:
             msg["result"] = result
-        if session_token is not None:
-            msg["session_token"] = session_token
         self._send(msg)
         return self._recv()
 
-    def start(self, session_token=None):
-        msg = {"action": "start"}
-        if session_token is not None:
-            msg["session_token"] = session_token
-        self._send(msg)
+    def start(self):
+        self._send({"action": "start", "secret_id": self.secret_id})
         return self._recv()
 
-    def dismiss(self, session_token=None):
-        msg = {"action": "dismiss"}
-        if session_token is not None:
-            msg["session_token"] = session_token
-        self._send(msg)
+    def dismiss(self):
+        self._send({"action": "dismiss", "secret_id": self.secret_id})
         return self._recv()
 
     def close(self):
@@ -263,7 +259,7 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertIn("display", state)
         self.assertIn("colour", state)
         self.assertIn("room_state", state)
-        self.assertIsNotNone(state["session_token"])
+        self.assertNotIn("session_token", state)
 
     def test_join_assigns_a_colour(self):
         state = self._ws(1, "badge-colour").join(GPS_CAPS)
@@ -278,15 +274,15 @@ class RoomServerTestCase(unittest.TestCase):
 
     def test_poll_after_join(self):
         c = self._ws(1, "badge-poll")
-        token = c.join(GPS_CAPS)["session_token"]
-        state = c.poll(GPS_CAPS, session_token=token)
+        c.join(GPS_CAPS)
+        state = c.poll(GPS_CAPS)
         self.assertIn("assignment", state)
         self.assertIn("scores", state)
 
     def test_poll_assignment_is_stable(self):
         c = self._ws(1, "badge-stable")
         join_data = c.join(GPS_CAPS)
-        poll_data = c.poll(GPS_CAPS, session_token=join_data["session_token"])
+        poll_data = c.poll(GPS_CAPS)
         if join_data.get("assignment") and poll_data.get("assignment"):
             self.assertEqual(join_data["assignment"]["id"], poll_data["assignment"]["id"])
 
@@ -301,15 +297,15 @@ class RoomServerTestCase(unittest.TestCase):
     def test_start_round_transitions_to_in_round(self):
         room_server.rooms[3] = _make_room(3)
         c = self._ws(3, "badge-start")
-        token = c.join(GPS_CAPS)["session_token"]
-        state = c.start(session_token=token)
+        c.join(GPS_CAPS)
+        state = c.start()
         self.assertEqual(state["room_state"], "in-round")
 
     def test_poll_after_start_returns_assignment(self):
         room_server.rooms[3] = _make_room(3)
         c = self._ws(3, "badge-start2")
-        token = c.join(GPS_CAPS)["session_token"]
-        state = c.start(session_token=token)
+        c.join(GPS_CAPS)
+        state = c.start()
         self.assertIsNotNone(state["assignment"])
 
     # ------------------------------------------------------------------ result
@@ -317,8 +313,8 @@ class RoomServerTestCase(unittest.TestCase):
     def test_submit_passed_increments_score(self):
         room_server.rooms[2] = _make_room(2)
         c = self._ws(2, "badge-pass")
-        token = c.join(GPS_CAPS)["session_token"]
-        state = c.start(session_token=token)
+        c.join(GPS_CAPS)
+        state = c.start()
         assignment = state.get("assignment")
         if assignment is None:
             self.skipTest("No assignment issued — cannot test result submission")
@@ -329,14 +325,14 @@ class RoomServerTestCase(unittest.TestCase):
             "module": assignment["module"],
             "command": assignment["command"],
         }
-        state = c.poll(GPS_CAPS, result=result, session_token=token)
+        state = c.poll(GPS_CAPS, result=result)
         self.assertEqual(state["scores"]["passed"], before + 1)
 
     def test_submit_failed_increments_score(self):
         room_server.rooms[2] = _make_room(2)
         c = self._ws(2, "badge-fail")
-        token = c.join(GPS_CAPS)["session_token"]
-        state = c.start(session_token=token)
+        c.join(GPS_CAPS)
+        state = c.start()
         assignment = state.get("assignment")
         if assignment is None:
             self.skipTest("No assignment issued — cannot test result submission")
@@ -347,14 +343,14 @@ class RoomServerTestCase(unittest.TestCase):
             "module": assignment["module"],
             "command": assignment["command"],
         }
-        state = c.poll(GPS_CAPS, result=result, session_token=token)
+        state = c.poll(GPS_CAPS, result=result)
         self.assertEqual(state["scores"]["failed"], before + 1)
 
     def test_wrong_assignment_id_is_ignored(self):
         room_server.rooms[2] = _make_room(2)
         c = self._ws(2, "badge-wrongid")
-        token = c.join(GPS_CAPS)["session_token"]
-        state = c.start(session_token=token)
+        c.join(GPS_CAPS)
+        state = c.start()
         before = state["scores"]["passed"]
         result = {
             "assignment_id": "does-not-exist",
@@ -362,7 +358,7 @@ class RoomServerTestCase(unittest.TestCase):
             "module": "GPS",
             "command": "move 5m away",
         }
-        state = c.poll(GPS_CAPS, result=result, session_token=token)
+        state = c.poll(GPS_CAPS, result=result)
         self.assertEqual(state["scores"]["passed"], before)
 
     # ------------------------------------------------------------------ dismiss
@@ -370,8 +366,8 @@ class RoomServerTestCase(unittest.TestCase):
     def test_dismiss_after_round_returns_to_waiting(self):
         room_server.rooms[2] = _make_room(2)
         c = self._ws(2, "badge-dismiss")
-        token = c.join(GPS_CAPS)["session_token"]
-        c.start(session_token=token)
+        c.join(GPS_CAPS)
+        c.start()
         # Force the round to end via the admin "hurry" control, then wait it out.
         creds = base64.b64encode(("admin:" + room_server._ADMIN_PASSWORD).encode()).decode()
         req = urllib.request.Request(
@@ -382,9 +378,9 @@ class RoomServerTestCase(unittest.TestCase):
         urllib.request.urlopen(req).close()
         # hurry leaves 5s on the clock, so the round needs a few seconds to end.
         self.assertTrue(_wait_until(
-            lambda: c.poll(session_token=token).get("room_state") == "finished", timeout=8.0
+            lambda: c.poll().get("room_state") == "finished", timeout=8.0
         ))
-        state = c.dismiss(session_token=token)
+        state = c.dismiss()
         self.assertEqual(state["room_state"], "waiting")
 
     # ------------------------------------------------------------------ leave
@@ -433,9 +429,19 @@ class RoomServerTestCase(unittest.TestCase):
         with self.assertRaises(WSHandshakeError):
             WSClient(999, "badge-bad")
 
-    def test_missing_badge_id_returns_400(self):
+    def test_handshake_without_identity_succeeds(self):
+        # Identity now comes from the secret_id in the first message, not the
+        # URL, so the bare handshake must complete (101) — the connection just
+        # can't do anything until it identifies.
         status = _ws_status_for("/ws/rooms/1")
-        self.assertIn("400", status)
+        self.assertIn("101", status)
+
+    def test_action_without_secret_id_is_rejected(self):
+        # A message that never carries a secret_id can't act as any badge.
+        c = self._ws(1, "badge-anon")
+        c._send({"action": "start"})  # no secret_id
+        state = c._recv()
+        self.assertIn("error", state)
 
     # ------------------------------------------------------------------ stats
 

@@ -281,15 +281,6 @@ class TestApplyPollResponse(unittest.TestCase):
         self.s.apply_poll_response(self._poll(room_state="waiting"))
         self.assertIsNone(self.s.expected_module)
 
-    def test_stores_session_token(self):
-        self.s.apply_poll_response(self._poll(session_token="tok-abc"))
-        self.assertEqual(self.s.session_token, "tok-abc")
-
-    def test_session_token_not_overwritten_by_absent(self):
-        self.s.session_token = "existing"
-        self.s.apply_poll_response(self._poll())
-        self.assertEqual(self.s.session_token, "existing")
-
 
 class TestApplyPollResponseAssignment(unittest.TestCase):
     def setUp(self):

@@ -8,7 +8,6 @@ class GameSession:
     def __init__(self):
         self.room_id = 1
         self.room_state = None  # None | "waiting" | "in-round" | "finished"
-        self.session_token = None
         self.cancel_hold_start = None
         self.expected_module = None
         self.expected_command_id = None
@@ -74,7 +73,6 @@ class GameSession:
     def start_room(self, room_id):
         self.room_id = room_id
         self.room_state = "waiting"
-        self.session_token = None
         self.cancel_hold_start = None
         self.clear_assignment()
         self.clear_display()
@@ -89,7 +87,6 @@ class GameSession:
 
     def stop_room(self):
         self.room_state = None
-        self.session_token = None
         self.cancel_hold_start = None
         self.clear_assignment()
         self.clear_display()
@@ -186,9 +183,6 @@ class GameSession:
             self.is_dismissed = data["is_dismissed"]
         if data.get("players") is not None:
             self.players = data["players"]
-        token = data.get("session_token")
-        if token:
-            self.session_token = token
         if self.room_state == "in-round" and module_lookup is not None:
             if "assignment" in data:
                 self._apply_assignment(data["assignment"], now_ms, module_lookup)

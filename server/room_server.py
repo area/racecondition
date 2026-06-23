@@ -292,9 +292,6 @@ async def hurry(request):
 
 async def ws_handler(request):
     room_id = int(request.match_info["room_id"])
-    badge_id = request.query.get("badge_id")
-    if not badge_id:
-        return web.Response(status=400)
     with _rooms_lock:
         room = rooms.get(room_id)
     if room is None:
@@ -302,14 +299,17 @@ async def ws_handler(request):
 
     ws = web.WebSocketResponse(heartbeat=_WS_HEARTBEAT_S)
     await ws.prepare(request)
-    badge_short = badge_id[-6:]
-    log.info("ws room=%s badge=%s connected", room_id, badge_short)
+    log.info("ws room=%s connected", room_id)
 
-    # The session token is issued in the join reply and thereafter arrives in
-    # inbound messages; the client never puts it in the URL (see
-    # RoomClient.ws_url), so it starts unset.
+    # Identity is proven by the secret_id the badge sends in its messages (over
+    # wss, and in the body rather than the URL so it never lands in access
+    # logs). The server derives the public badge_id from it; the badge_id is
+    # never accepted as an input, so leaking it (e.g. on the leaderboard) grants
+    # no authority. badge_id stays None until the first message carries a
+    # secret_id — actions before that are rejected.
+    badge_id = None
+    badge_short = "??????"
     pending_caps = None
-    session_token = None
     last_comparable = None
     timer_anchor = None
     joined = False
@@ -345,7 +345,7 @@ async def ws_handler(request):
             except asyncio.TimeoutError:
                 # Idle: once joined, push a delta so the badge sees any change.
                 if joined:
-                    state = room.poll(badge_id, None, result=None, session_token=session_token)
+                    state = room.poll(badge_id, None, result=None)
                     await send_state(state)
                 continue
 
@@ -356,33 +356,39 @@ async def ws_handler(request):
                 log.info("ws room=%s badge=%s RECV <%s>", room_id, badge_short, msg.type.name)
                 break
 
-            log.info("ws room=%s badge=%s RECV %s", room_id, badge_short, msg.data)
             m = json.loads(msg.data)
+            secret_id = m.get("secret_id")
+            if isinstance(secret_id, str) and secret_id:
+                badge_id = _public_id_from_secret(secret_id)
+                badge_short = badge_id[-6:]
+            # Log the message, but never the secret_id — it's the badge's
+            # credential. The derived badge_id (above) already identifies the
+            # connection in the log.
+            redacted = {k: ("<redacted>" if k == "secret_id" else v) for k, v in m.items()}
+            log.info("ws room=%s badge=%s RECV %s", room_id, badge_short, json.dumps(redacted))
             if "capabilities" in m:
                 pending_caps = m["capabilities"]
-            if "session_token" in m:
-                session_token = m["session_token"]
             action = m.get("action")
 
             if action == "leave":
                 break
-            if action == "join":
+            # Every game action needs an authenticated identity. A message that
+            # never carried a secret_id can't act as any badge.
+            if badge_id is None:
+                state = {"room_id": room_id, "error": "Identify with secret_id first"}
+            elif action == "join":
                 state = room.join(badge_id, pending_caps)
                 joined = "error" not in state
-                if state.get("session_token"):
-                    session_token = state["session_token"]
             elif action == "start":
                 # Surface start_round's error (e.g. "Badge not in room", "Round
                 # already in progress") instead of masking it with a poll snapshot.
                 result = room.start_round(badge_id)
-                state = result if "error" in result else room.poll(
-                    badge_id, pending_caps, session_token=session_token)
+                state = result if "error" in result else room.poll(badge_id, pending_caps)
             elif action == "dismiss":
                 room.dismiss_score(badge_id)
-                state = room.poll(badge_id, pending_caps, session_token=session_token)
+                state = room.poll(badge_id, pending_caps)
             else:
-                state = room.poll(badge_id, pending_caps,
-                                  result=m.get("result"), session_token=session_token)
+                state = room.poll(badge_id, pending_caps, result=m.get("result"))
             # Explicit requests always get a full snapshot so the badge fully
             # resyncs on any interaction.
             await send_state(state, full=True)

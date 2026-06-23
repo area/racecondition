@@ -65,7 +65,7 @@ class NetworkController:
 		# actions / results every tick regardless of whether the server is
 		# talking. On teardown the reader is cancelled and the socket closed.
 		session = self.app.session
-		ws_url = self.app.room_client.ws_url(session.room_id, self.app.badge_id)
+		ws_url = self.app.room_client.ws_url(session.room_id)
 		print("[RC] ws → {}".format(ws_url))
 		ws = None
 		reader_task = None
@@ -75,10 +75,16 @@ class NetworkController:
 			self.joined = False
 			print("[RC] ws connected")
 
-			# Join over the websocket: the server replies with our session
-			# token, colour and the initial room state.
+			# Join over the websocket. The join carries our secret_id, which
+			# authenticates the connection: the server derives our badge_id from
+			# it and binds it to this socket for the rest of the session. The
+			# reply gives us our colour and the initial room state.
 			caps = self._capabilities()
-			await self._ws_send_json(ws, {"action": "join", "capabilities": caps})
+			await self._ws_send_json(ws, {
+				"action": "join",
+				"capabilities": caps,
+				"secret_id": self.app._secret_id,
+			})
 			self.caps_sync.mark_sent(caps)
 
 			reader_task = asyncio.create_task(self._ws_read_loop(ws))
@@ -134,8 +140,6 @@ class NetworkController:
 		session = self.app.session
 		while self.outbox:
 			msg = self.outbox.pop(0)
-			if session.session_token:
-				msg["session_token"] = session.session_token
 			await self._ws_send_json(ws, msg)
 		caps = self.caps_sync.maybe_caps(self._capabilities())
 		if caps is not None:
@@ -144,10 +148,7 @@ class NetworkController:
 		result = session.pending_result
 		if result:
 			session.pending_result = None
-			await self._ws_send_json(ws, {
-				"result": result,
-				"session_token": session.session_token,
-			})
+			await self._ws_send_json(ws, {"result": result})
 
 	def _apply_ws_state(self, data):
 		app = self.app
@@ -156,9 +157,8 @@ class NetworkController:
 			app.notification = Notification(data["error"])
 			# An error before we've joined this session is a fatal join failure
 			# (e.g. "Room is full" on a reconnect after being pruned): bail back
-			# to the menu rather than reconnect-looping on the same rejection. A
-			# stale session_token from a previous session is not evidence we're
-			# in the room, so we key off this session's join, not the token.
+			# to the menu rather than reconnect-looping on the same rejection.
+			# We key off this session's join, not any earlier connection.
 			if not self.joined:
 				app.session.stop_room()
 				app._ensure_menu()
