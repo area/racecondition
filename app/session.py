@@ -22,6 +22,7 @@ class GameSession:
         self.display_timeout_s = None
         self.display_updated_ms = None
         self.pending_result = None
+        self.assignment_timed_out = False
         self.score_pass = 0
         self.score_fail = 0
         self.badge_colour = None
@@ -98,6 +99,7 @@ class GameSession:
             self.clear_assignment()
             self.clear_display()
             self.pending_result = None
+            self.assignment_timed_out = False
             self.score_pass = 0
             self.score_fail = 0
             self.badge_scores = {}
@@ -191,6 +193,11 @@ class GameSession:
 
     def _apply_assignment(self, assignment, now_ms, module_lookup):
         if not assignment:
+            # An assignment vanishing while we still held one means the server
+            # timed it out (we clear our own on a local pass, so expected is
+            # already None in that case) — flag a fail for the LED feedback.
+            if self.expected_command_id is not None:
+                self.assignment_timed_out = True
             self.clear_assignment()
             return
         module_name = assignment.get("module")
@@ -201,6 +208,8 @@ class GameSession:
             self.clear_assignment()
             return
         if self.expected_command_id != assignment_id:
+            if self.expected_command_id is not None:
+                self.assignment_timed_out = True
             try:
                 module.set_command(command)
             except Exception:

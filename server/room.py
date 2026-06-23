@@ -14,7 +14,11 @@ from leaderboard import SqliteLeaderboard
 STALE_BADGE_SECONDS = 20
 ROUND_DURATION_S = 120
 ASSIGNMENT_TIMEOUT_S = 15
-COLOURS = ["red", "cyan", "blue", "yellow", "purple", "orange"]
+# Mirror of COLOURS in app/constants.py (the canonical palette, which maps
+# these to RGB and explains why red/green are excluded). The badge runs a
+# separate runtime and the server image ships only server/, so the list is
+# duplicated here; tests/test_colour_sync.py fails if the two drift apart.
+COLOURS = ["white", "cyan", "blue", "yellow", "purple", "orange"]
 MAX_BADGES = len(COLOURS)
 
 
@@ -139,6 +143,7 @@ class Room:
                     "badge_id": bid,
                     "colour": slot.colour,
                     "module_count": len(slot.capabilities),
+                    "modules": list(slot.capabilities.keys()),
                     "last_seen_s": round(now - slot.last_seen, 1),
                 }
                 for bid, slot in self._badges.items()

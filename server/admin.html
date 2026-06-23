@@ -128,6 +128,11 @@
         }
         li { margin-bottom: 4px; }
         .muted { color: var(--silk-dim); }
+        .cmd {
+            font-family: "IBM Plex Mono", monospace;
+            font-weight: 600;
+            color: var(--copper);
+        }
         .badge {
             display: inline-block;
             border: 1px solid rgba(200, 121, 58, 0.28);
@@ -442,12 +447,15 @@
 
             const name = (bid) => esc((usernames && usernames[bid]) || bid);
             const colourDot = (c) => c ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${esc(c)};margin-right:4px;vertical-align:middle;box-shadow:0 0 4px ${esc(c)}40"></span>` : '';
+            const moduleChips = (mods) => (mods && mods.length)
+                ? mods.map((m) => `<span class="mod-chip">${esc(m)}</span>`).join("")
+                : '<span class="muted">no modules</span>';
             const badgeList = badges.length
-                ? badges.map((b) => `<li>${colourDot(b.colour)}<strong>${name(b.badge_id)}</strong> <span class="badge">${esc(b.colour || '?')}</span> <span class="muted">${b.module_count} modules</span></li>`).join("")
+                ? badges.map((b) => `<li>${colourDot(b.colour)}<strong>${name(b.badge_id)}</strong> ${moduleChips(b.modules)}</li>`).join("")
                 : '<li class="muted">No active badges</li>';
 
             const assignmentList = assignments.length
-                ? assignments.map((a) => `<li>${colourDot(a.target_colour)}<strong>${esc(a.target_colour ? a.target_colour.charAt(0).toUpperCase() + a.target_colour.slice(1) + ': ' : '')}${esc(a.command)}</strong> on ${esc(a.module)} <span class="muted">${name(a.target_badge_id)}</span></li>`).join("")
+                ? assignments.map((a) => `<li>${colourDot(a.target_colour)}<strong>${name(a.target_badge_id)}</strong> <span class="cmd">${esc(a.command)}</span> on <span class="mod-chip">${esc(a.module)}</span></li>`).join("")
                 : '<li class="muted">No active assignments</li>';
 
             const hurryBtn = state === "in-round"

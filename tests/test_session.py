@@ -315,6 +315,40 @@ class TestApplyPollResponseAssignment(unittest.TestCase):
         self.s.apply_poll_response(data, now_ms=0)
         self.assertIsNone(self.s.expected_module)
 
+    def test_timeout_flagged_when_pending_assignment_vanishes(self):
+        self.s.set_assignment(self.module, "x1", "a")
+        data = self._poll_in_round(assignment=None)
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertTrue(self.s.assignment_timed_out)
+
+    def test_timeout_flagged_when_assignment_replaced(self):
+        self.s.set_assignment(self.module, "x1", "a")
+        data = self._poll_in_round(assignment={
+            "id": "x2", "module": "MegaDrive", "command": "b",
+            "time_remaining_s": 15.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertTrue(self.s.assignment_timed_out)
+
+    def test_no_timeout_when_assignment_refreshed_same_id(self):
+        self.s.set_assignment(self.module, "x1", "a")
+        data = self._poll_in_round(assignment={
+            "id": "x1", "module": "MegaDrive", "command": "a",
+            "time_remaining_s": 9.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertFalse(self.s.assignment_timed_out)
+
+    def test_no_timeout_when_no_assignment_was_pending(self):
+        # Local pass clears our assignment first; the next assignment arriving
+        # must not be misread as a timeout of the one we just completed.
+        data = self._poll_in_round(assignment={
+            "id": "x1", "module": "MegaDrive", "command": "a",
+            "time_remaining_s": 15.0, "timeout_s": 15.0,
+        })
+        self.s.apply_poll_response(data, now_ms=0, module_lookup=self.lookup)
+        self.assertFalse(self.s.assignment_timed_out)
+
     def test_display_set_when_in_round(self):
         data = self._poll_in_round(display={
             "module": "GPS", "command": "move 5m away",

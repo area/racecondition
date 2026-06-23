@@ -17,6 +17,7 @@ from .room_client import RoomClient
 from .session import GameSession
 from .test_session import TestSession
 from .constants import BADGE_COLOURS, CANCEL_HOLD_MS
+from .leds import LedRing, fill_frame, fill_up_frame, FLASH_GREEN, FLASH_RED
 from .identity import build_secret_id, derive_public_id
 from .render import Renderer
 from .network import NetworkController
@@ -37,6 +38,7 @@ class RaceConditionApp(app.App):
 		self._test_session = None
 		self._qr_active = False
 		self.net = NetworkController(self)
+		self.leds = LedRing(self._write_leds)
 		self.renderer = Renderer(self)
 		self._scan()
 		self._ensure_menu()
@@ -278,9 +280,11 @@ class RaceConditionApp(app.App):
 		self._ensure_menu()
 
 	def _set_leds(self, colour):
-		rgb = BADGE_COLOURS.get(colour, (0, 0, 0))
-		for i in range(1, 13):
-			tildagonos.leds[i] = rgb
+		self.leds.set_base(BADGE_COLOURS.get(colour, (0, 0, 0)))
+
+	def _write_leds(self, frame):
+		for i, rgb in enumerate(frame):
+			tildagonos.leds[i + 1] = rgb
 		tildagonos.leds.write()
 
 	def _leave_room(self):
@@ -307,15 +311,25 @@ class RaceConditionApp(app.App):
 					self._ensure_menu()
 					return
 
-			if self.session.in_round and self.session.expected_module:
-				status = self.session.expected_module.check_command()
-				if status in (CommandStatus.PASSED, CommandStatus.FAILED):
-					self.session.pending_result = self.session.build_result(status)
+			if self.session.in_round:
+				if self.session.expected_module:
+					status = self.session.expected_module.check_command()
+					if status in (CommandStatus.PASSED, CommandStatus.FAILED):
+						self.session.pending_result = self.session.build_result(status)
+						if status == CommandStatus.PASSED:
+							self.leds.flash(FLASH_GREEN, time.ticks_ms(), fill_up_frame)
+						else:
+							self.leds.flash(FLASH_RED, time.ticks_ms(), fill_frame)
+				if self.session.assignment_timed_out:
+					self.session.assignment_timed_out = False
+					self.leds.flash(FLASH_RED, time.ticks_ms(), fill_frame)
 
 		elif not self._qr_active:
 			self._ensure_menu()
 			if self.menu:
 				self.menu.update(delta)
+
+		self.leds.update(time.ticks_ms())
 
 		if self.notification:
 			self.notification.update(delta)
