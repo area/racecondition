@@ -225,6 +225,10 @@ class RaceConditionApp(app.App):
 		self.module_registry.reset_connected()
 		self.net.mark_caps_dirty()
 		self.net.reset_outbox()
+		# Show the "Connecting..." placeholder from the instant we enter the room,
+		# not just once _run_ws_session starts; otherwise a stale joined=True from
+		# the previous session would flash the old room's status for a tick.
+		self.net.joined = False
 		# The websocket session (NetworkController.run) joins the room and drives
 		# all in-game communication from here on; nothing else is sent over HTTP.
 

@@ -99,7 +99,8 @@ class Room:
             self._prune_stale()
             if self._state == "finished":
                 self._dismissed.add(badge_id)
-            self._badges.pop(badge_id, None)
+            if self._badges.pop(badge_id, None) is not None:
+                self._command_pool_cache = None
             self._ready.discard(badge_id)
             self._dismissed.discard(badge_id)
             if not self._badges:
@@ -187,6 +188,7 @@ class Room:
         self._dismissed = set()
         self._ready = set()
         self._players_generation = 0
+        self._command_pool_cache = None
 
     def _now(self):
         return time.monotonic()
@@ -213,6 +215,8 @@ class Room:
             del self._badges[bid]
             self._dismissed.discard(bid)
             self._ready.discard(bid)
+        if stale:
+            self._command_pool_cache = None
         if not self._badges:
             self._reset_state()
         elif stale:
@@ -233,19 +237,27 @@ class Room:
                 score={"passed": 0, "failed": 0},
             )
             self._players_generation += 1
+            self._command_pool_cache = None
         else:
             slot = self._badges[badge_id]
             if capabilities is not None:
                 slot.capabilities = capabilities
+                self._command_pool_cache = None
             slot.last_seen = self._now()
 
     def _command_pool(self):
-        return [
-            (module, command)
-            for slot in self._badges.values()
-            for module, commands in slot.capabilities.items()
-            for command in commands
-        ]
+        # Cached: rebuilt lazily only after a change to badge membership or
+        # capabilities invalidates it (see _command_pool_cache = None below).
+        # Every in-round poll calls this, but the underlying set only moves when
+        # a badge joins, leaves, is pruned, or pushes new capabilities.
+        if self._command_pool_cache is None:
+            self._command_pool_cache = [
+                (module, command)
+                for slot in self._badges.values()
+                for module, commands in slot.capabilities.items()
+                for command in commands
+            ]
+        return self._command_pool_cache
 
     def _badge_can_run(self, badge_id, module, command):
         slot = self._badges.get(badge_id)

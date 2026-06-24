@@ -87,6 +87,14 @@ class Renderer:
 		ctx.font_size = 16
 		ctx.move_to(0, -68).text("Room {}".format(session.room_id))
 
+		# Until the websocket join round-trip completes we have no server state
+		# (player list, badge count), so show a connecting placeholder rather
+		# than the misleading "0 badges connected".
+		if not self.app.net.joined:
+			ctx.move_to(0, -10).text("Connecting...")
+			self._draw_cancel_hint(ctx, "leave")
+			return
+
 		players = session.players
 		if players:
 			y = -52
