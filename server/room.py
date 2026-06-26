@@ -18,7 +18,7 @@ ROUND_DURATION_S = 120
 # moment it is issued (stored on the Assignment), so its countdown stays stable.
 ASSIGNMENT_TIMEOUT_S = 15
 ASSIGNMENT_TIMEOUT_FLOOR_S = 10
-# Mirror of COLOURS in app/constants.py (the canonical palette, which maps
+# Mirror of COLOURS in badge/constants.py (the canonical palette, which maps
 # these to RGB and explains why red/green are excluded). The badge runs a
 # separate runtime and the server image ships only server/, so the list is
 # duplicated here; tests/test_colour_sync.py fails if the two drift apart.

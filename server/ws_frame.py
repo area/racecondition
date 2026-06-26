@@ -2,7 +2,7 @@
 
 Shared by the server handler (server/room_server.py) and its integration-test
 client (server/test_room_server.py), which both speak WebSocket over plain
-sockets. The badge's client lives in app/aiohttp_ws.py and can't share this — it
+sockets. The badge's client lives in badge/lib/aiohttp_ws.py and can't share this — it
 is built on asyncio streams, so its reads/writes are awaited.
 
 The read/write primitives take a `read(n) -> bytes` / writer-agnostic byte

@@ -2,8 +2,8 @@ import time
 import unittest
 from unittest.mock import MagicMock
 
-from app.test_session import TestSession, TEST_SKIP_HOLD_MS
-from app.hexpansion.base import CommandStatus
+from badge.test_session import TestSession, TEST_SKIP_HOLD_MS
+from badge.hexpansion.base import CommandStatus
 
 
 def _make_module(name, commands):

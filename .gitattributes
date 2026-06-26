@@ -12,3 +12,6 @@ fly.toml               export-ignore
 .dockerignore          export-ignore
 .gitmodules            export-ignore
 .gitattributes         export-ignore
+.gitignore             export-ignore
+README.md              export-ignore
+LICENSE                export-ignore

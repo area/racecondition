@@ -31,7 +31,7 @@ room_server = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(room_server)
 
 _rc_spec = importlib.util.spec_from_file_location(
-    "room_client", Path(__file__).parents[1] / "app" / "room_client.py"
+    "room_client", Path(__file__).parents[1] / "badge" / "room_client.py"
 )
 _rc_module = importlib.util.module_from_spec(_rc_spec)
 _rc_spec.loader.exec_module(_rc_module)

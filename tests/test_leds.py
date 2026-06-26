@@ -1,4 +1,4 @@
-from app.leds import (
+from badge.leds import (
     LedRing,
     fill_frame,
     fill_up_frame,

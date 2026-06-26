@@ -3,7 +3,7 @@ correctly to TestSession. Unit tests for TestSession itself live in test_test_se
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app.app import RaceConditionApp
+from badge.app import RaceConditionApp
 
 
 def _make_app(modules=None):

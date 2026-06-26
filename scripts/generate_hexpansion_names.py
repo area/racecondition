@@ -95,7 +95,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--output",
-        default="app/hexpansion_names.py",
+        default="badge/hexpansion_names.py",
         help="Path to the generated Python module.",
     )
 

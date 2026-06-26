@@ -3,10 +3,10 @@ import inspect
 import unittest
 from unittest.mock import MagicMock
 
-from app.session import GameSession
-from app.constants import CANCEL_HOLD_MS
-from app.hexpansion.base import CommandStatus
-import app.app as _app_module
+from badge.session import GameSession
+from badge.constants import CANCEL_HOLD_MS
+from badge.hexpansion.base import CommandStatus
+import badge.app as _app_module
 
 
 def _uses_capitalize(fn):

@@ -1,12 +1,14 @@
 """
-Root conftest — stubs MicroPython / Tildagon-only modules so the app package
+Root conftest — stubs MicroPython / Tildagon-only modules so the badge package
 is importable on desktop Python for testing.
 
-Strategy: pre-register a stub for sys.modules['app'] with __path__ pointing
-at the real app/ directory.  This lets Python find every app.* submodule
-normally while never executing app/__init__.py (which would trigger the
-`import app` circular reference in app/app.py) or any Tildagon framework
-imports.  All hardware modules (machine, imu, …) are replaced with
+Strategy: pre-register a stub for sys.modules['badge'] with __path__ pointing
+at the badge/ directory, where the app modules live (badge/app.py,
+badge/session.py, …). This lets Python find every badge.* submodule
+(badge.app, badge.session, …), mirroring how the firmware imports the
+published subpackage as `apps.<name>.badge.*`. The Tildagon framework's own
+top-level `app` module (badge/app.py does `import app` for the App base class)
+is stubbed separately. All hardware modules (machine, imu, …) are replaced with
 MagicMocks, and the two MicroPython-only time functions are shim-added to
 the standard library time module.
 """
@@ -55,20 +57,25 @@ for _name, _stub in [
 ]:
     sys.modules.setdefault(_name, _stub)
 
-# ── app package stub ─────────────────────────────────────────────────────────
-# Pre-register sys.modules['app'] as a lightweight module stub whose __path__
-# points at the real app/ directory.  Python's import system will find all
-# app.* submodules there without ever running app/__init__.py.
-# The stub also exposes a no-op App base class so that app/app.py's
-# `class RaceConditionApp(app.App)` resolves without error.
+# ── badge package stub ───────────────────────────────────────────────────────
+# Pre-register sys.modules['badge'] as a lightweight package stub whose __path__
+# points at the badge/ directory.  Python's import system will find every
+# badge.* submodule (badge.app, badge.session, …) there, mirroring how the
+# firmware imports the published subpackage as `apps.<name>.badge.*`.
+
+_badge_stub = types.ModuleType("badge")
+_badge_stub.__path__ = [str(Path(__file__).parent / "badge")]
+_badge_stub.__package__ = "badge"
+sys.modules["badge"] = _badge_stub
+
+# ── Tildagon framework `app` module stub ─────────────────────────────────────
+# badge/app.py does `import app; class RaceConditionApp(app.App)`.  Provide a
+# no-op App base class so that resolves without the real framework.
 
 class _App:
     """No-op stand-in for the Tildagon framework's app.App."""
     def __init__(self, *args, **kwargs): pass
 
 _app_stub = types.ModuleType("app")
-_app_stub.__path__ = [str(Path(__file__).parent / "app")]
-_app_stub.__package__ = "app"
 _app_stub.App = _App
-
 sys.modules["app"] = _app_stub

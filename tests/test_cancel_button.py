@@ -2,8 +2,8 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-import app.app as _app_module
-from app.app import RaceConditionApp, CANCEL_HOLD_MS
+import badge.app as _app_module
+from badge.app import RaceConditionApp, CANCEL_HOLD_MS
 
 
 def _make_cancel_event():

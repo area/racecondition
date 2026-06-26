@@ -1,7 +1,0 @@
-{
-  "callable": "RaceConditionApp",
-  "name": "Race Condition",
-  "category": "unknown",
-  "hidden": false,
-  "path": "apps.racecondition.app"
-}

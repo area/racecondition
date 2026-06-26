@@ -195,10 +195,10 @@
 
 <div class="page">
     <h1>Adding Hexpansion support</h1>
-    <p class="lead">Each supported Hexpansion has a small Python class in <code>app/hexpansion/</code>. It declares the VID/PID for detection, the commands it can receive, and how to tell when a command has been carried out. Everything else is handled by the base class.</p>
+    <p class="lead">Each supported Hexpansion has a small Python class in <code>badge/hexpansion/</code>. It declares the VID/PID for detection, the commands it can receive, and how to tell when a command has been carried out. Everything else is handled by the base class.</p>
 
     <h2>What a module needs</h2>
-    <p>Extend <code>HexpansionModule</code> from <code>app/hexpansion/base.py</code> and define:</p>
+    <p>Extend <code>HexpansionModule</code> from <code>badge/hexpansion/base.py</code> and define:</p>
     <table class="api-table">
         <thead><tr><th>Attribute / method</th><th>What to do</th></tr></thead>
         <tbody>
@@ -226,7 +226,7 @@
         </tbody>
     </table>
 
-    <p>The three modules that ship with the game - <code>Tildagon2024</code>, <code>MegaDrive</code> and <code>GPS</code>, in <code>app/hexpansion/</code> - should be good references.</p>
+    <p>The three modules that ship with the game - <code>Tildagon2024</code>, <code>MegaDrive</code> and <code>GPS</code>, in <code>badge/hexpansion/</code> - should be good references.</p>
 
     <h2>Minimal example</h2>
     <p>A Hexpansion with a single big red button:</p>
@@ -250,8 +250,8 @@
 
     <h2>Register it</h2>
     <ol>
-        <li>Save your class as <code>app/hexpansion/MyHexpansion.py</code>.</li>
-        <li>Add it to <code>MODULE_TYPES</code> in <code>app/hexpansion/__init__.py</code>:</li>
+        <li>Save your class as <code>badge/hexpansion/MyHexpansion.py</code>.</li>
+        <li>Add it to <code>MODULE_TYPES</code> in <code>badge/hexpansion/__init__.py</code>:</li>
     </ol>
     <pre><code><span class="hl-kw">from</span> .MyHexpansion <span class="hl-kw">import</span> MyHexpansionModule
 
@@ -263,13 +263,14 @@ MODULE_TYPES = [
 ]</code></pre>
 
     <div class="callout callout-warn">
-        <strong>VID/PID must be in the lookup table.</strong> The table in <code>app/hexpansion_names.py</code> is generated from the <code>hexpansion-firmwares</code> repo - run <code>scripts/generate_hexpansion_names.py</code> to regenerate it if your Hexpansion is added to the repo. Otherwise, add your VID/PID manually to <code>MANUAL_FRIENDLY_NAME_OVERRIDES</code> in the script.
+        <strong>VID/PID must be in the lookup table.</strong> The table in <code>badge/hexpansion_names.py</code> is generated from the <code>hexpansion-firmwares</code> repo - run <code>scripts/generate_hexpansion_names.py</code> to regenerate it if your Hexpansion is added to the repo. Otherwise, add your VID/PID manually to <code>MANUAL_FRIENDLY_NAME_OVERRIDES</code> in the script.
     </div>
 
     <h2>Test it on hardware</h2>
-    <p>Copy the app to the badge and reset it:</p>
-    <pre><code>pipx run mpremote cp -r app/* :/apps/spaceteam/ && pipx run mpremote reset</code></pre>
-    <p>Then, with your Hexpansion plugged in, open the Race Condition app and select <strong>Test modules</strong> from the main menu and pick your hexpansion. It will step through each detected command for the hexpansion; perform the action and it advances automatically (hold Cancel for 2 s to skip). If your module doesn't appear it wasn't detected - check that its VID/PID is in <code>app/hexpansion_names.py</code> and regenerate with <code>scripts/generate_hexpansion_names.py</code> if needed.</p>
+    <p>Build the published payload and copy it to the badge, then reset it:</p>
+    <pre><code>git archive --worktree-attributes --format=tar "$(git write-tree)" | tar -x -C /tmp/rc-payload
+pipx run mpremote cp -r /tmp/rc-payload/* :/apps/racecondition/ && pipx run mpremote reset</code></pre>
+    <p>Then, with your Hexpansion plugged in, open the Race Condition app and select <strong>Test modules</strong> from the main menu and pick your hexpansion. It will step through each detected command for the hexpansion; perform the action and it advances automatically (hold Cancel for 2 s to skip). If your module doesn't appear it wasn't detected - check that its VID/PID is in <code>badge/hexpansion_names.py</code> and regenerate with <code>scripts/generate_hexpansion_names.py</code> if needed.</p>
 
 </div>
 </body>

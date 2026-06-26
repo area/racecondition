@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app.hexpansion.base import CommandStatus, HexpansionModule
-from app.hexpansion.MegaDrive import MegaDriveModule
-from app.hexpansion.GPS import GPSModule, _parse_nmea_rmc, _distance_m, TARGET_DISTANCE_M
-from app.hexpansion.Tildagon2024 import Tildagon2024Module
+from badge.hexpansion.base import CommandStatus, HexpansionModule
+from badge.hexpansion.MegaDrive import MegaDriveModule
+from badge.hexpansion.GPS import GPSModule, _parse_nmea_rmc, _distance_m, TARGET_DISTANCE_M
+from badge.hexpansion.Tildagon2024 import Tildagon2024Module
 
 
 # ── Fake button event helpers ─────────────────────────────────────────────────
