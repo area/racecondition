@@ -12,9 +12,6 @@ class GameSession:
         self.expected_module = None
         self.expected_command_id = None
         self.expected_command = None
-        self.assignment_time_remaining_s = None
-        self.assignment_timeout_s = None
-        self.assignment_updated_ms = None
         self.display_module_name = None
         self.display_command = None
         self.display_target_colour = None
@@ -23,8 +20,6 @@ class GameSession:
         self.display_updated_ms = None
         self.pending_result = None
         self.assignment_timed_out = False
-        self.score_pass = 0
-        self.score_fail = 0
         self.badge_colour = None
         self.badge_count = 0
         self.time_remaining_s = None
@@ -58,9 +53,6 @@ class GameSession:
         self.expected_module = None
         self.expected_command_id = None
         self.expected_command = None
-        self.assignment_time_remaining_s = None
-        self.assignment_timeout_s = None
-        self.assignment_updated_ms = None
 
     def clear_display(self):
         self.display_module_name = None
@@ -77,8 +69,6 @@ class GameSession:
         self.clear_assignment()
         self.clear_display()
         self.pending_result = None
-        self.score_pass = 0
-        self.score_fail = 0
         self.badge_count = 0
         self.time_remaining_s = None
         self.time_remaining_updated_ms = None
@@ -106,21 +96,16 @@ class GameSession:
             self.clear_display()
             self.pending_result = None
             self.assignment_timed_out = False
-            self.score_pass = 0
-            self.score_fail = 0
             self.badge_scores = {}
             self.ready_count = 0
             self.is_ready = False
             self.dismissed_count = 0
             self.is_dismissed = False
 
-    def set_assignment(self, module, assignment_id, command, time_remaining_s=None, timeout_s=None, now_ms=None):
+    def set_assignment(self, module, assignment_id, command):
         self.expected_module = module
         self.expected_command_id = assignment_id
         self.expected_command = command
-        self.assignment_time_remaining_s = time_remaining_s
-        self.assignment_timeout_s = timeout_s
-        self.assignment_updated_ms = now_ms
 
     def set_display(self, display, now_ms=None):
         if not display:
@@ -137,11 +122,7 @@ class GameSession:
     def build_result(self, status):
         if self.expected_module is None:
             return None
-        if status == CommandStatus.PASSED:
-            self.score_pass += 1
-        elif status == CommandStatus.FAILED:
-            self.score_fail += 1
-        else:
+        if status not in (CommandStatus.PASSED, CommandStatus.FAILED):
             return None
         result = {
             "assignment_id": self.expected_command_id,
@@ -185,7 +166,7 @@ class GameSession:
             self.players = data["players"]
         if self.room_state == "in-round" and module_lookup is not None:
             if "assignment" in data:
-                self._apply_assignment(data["assignment"], now_ms, module_lookup)
+                self._apply_assignment(data["assignment"], module_lookup)
             if "display" in data:
                 self.set_display(data["display"], now_ms=now_ms)
         colour = data.get("colour")
@@ -194,7 +175,7 @@ class GameSession:
             return colour
         return None
 
-    def _apply_assignment(self, assignment, now_ms, module_lookup):
+    def _apply_assignment(self, assignment, module_lookup):
         if not assignment:
             # An assignment vanishing while we still held one means the server
             # timed it out (we clear our own on a local pass, so expected is
@@ -218,12 +199,7 @@ class GameSession:
             except Exception:
                 self.clear_assignment()
                 return
-        self.set_assignment(
-            module, assignment_id, command,
-            time_remaining_s=assignment.get("time_remaining_s"),
-            timeout_s=assignment.get("timeout_s"),
-            now_ms=now_ms,
-        )
+        self.set_assignment(module, assignment_id, command)
 
     def remaining_seconds(self, now_ms=None):
         if self.time_remaining_s is None:

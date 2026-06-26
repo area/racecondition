@@ -108,19 +108,20 @@ fly certs add racecondition.area.io                     # then add the shown rec
 
 ## API
 
+In-game actions (join, poll, submit result, start, dismiss, leave) all flow over
+the WebSocket — see below. The HTTP endpoints cover only room discovery/creation,
+username registration, and admin controls.
+
 ### Public
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/rooms` | Active rooms with badge count and state |
 | GET | `/api/leaderboard` | All completed round scores |
+| GET | `/api/stats` | Aggregate leaderboard stats |
 | POST | `/api/rooms/create` | Create a new room |
 | POST | `/api/register` | Register or clear a badge username |
-| POST | `/api/rooms/<id>/join` | Join a room |
-| POST | `/api/rooms/<id>/poll` | Poll for state, submit result |
-| POST | `/api/rooms/<id>/leave` | Leave a room |
-| POST | `/api/rooms/<id>/start` | Mark ready / start round |
-| POST | `/api/rooms/<id>/dismiss` | Dismiss the score screen |
+| WS | `/ws/rooms/<id>` | In-game session: join, poll, result, start, dismiss, leave |
 
 ### Admin (Basic auth required)
 

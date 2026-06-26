@@ -87,14 +87,6 @@ class TestBuildResult(unittest.TestCase):
         result = self.s.build_result(CommandStatus.FAILED)
         self.assertEqual(result["status"], "failed")
 
-    def test_passed_increments_local_score(self):
-        self.s.build_result(CommandStatus.PASSED)
-        self.assertEqual(self.s.score_pass, 1)
-
-    def test_failed_increments_local_score(self):
-        self.s.build_result(CommandStatus.FAILED)
-        self.assertEqual(self.s.score_fail, 1)
-
     def test_build_result_clears_assignment(self):
         self.s.build_result(CommandStatus.PASSED)
         self.assertIsNone(self.s.expected_module)

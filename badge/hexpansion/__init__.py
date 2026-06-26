@@ -50,17 +50,7 @@ class ModuleRegistry:
 			module.reset()
 
 
-def get_connected_modules(hexpansions):
-	return ModuleRegistry().scan(hexpansions)
-
-
-def get_capabilities(modules):
-	return [module.get_capabilities() for module in modules]
-
-
 __all__ = [
 	"CommandStatus",
 	"ModuleRegistry",
-	"get_connected_modules",
-	"get_capabilities",
 ]
