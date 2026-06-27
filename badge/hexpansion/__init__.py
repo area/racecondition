@@ -1,4 +1,4 @@
-from .base import CommandStatus, HexpansionModule
+from .base import CommandStatus
 from .MegaDrive import MegaDriveModule
 from .GPS import GPSModule
 from .Tildagon2024 import Tildagon2024Module

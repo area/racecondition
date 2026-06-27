@@ -4,3 +4,4 @@ CONTEXT.md
 docs/
 .scratch
 server/racecondition.db*
+rc-payload

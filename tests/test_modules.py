@@ -119,13 +119,13 @@ class TestGPSCommandStateMachine(unittest.TestCase):
 
     def test_waiting_when_no_fix(self):
         m = self._make_module()
-        m.set_command("move 5m away")
+        m.set_command("move 10m away")
         self.assertEqual(m.check_command(), CommandStatus.WAITING)
 
     def test_latches_start_pos_on_first_fix(self):
         m = self._make_module()
         m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 5m away")
+        m.set_command("move 10m away")
         # start_pos was None at set_command time; first check latches it
         result = m.check_command()
         self.assertEqual(result, CommandStatus.WAITING)
@@ -134,7 +134,7 @@ class TestGPSCommandStateMachine(unittest.TestCase):
     def test_passes_when_moved_far_enough(self):
         m = self._make_module()
         m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 5m away")
+        m.set_command("move 10m away")
         m.check_command()  # latches start_pos
         m._current_pos = {"lat": 51.5 + TARGET_DISTANCE_M / 111111 + 0.0001, "lon": -0.1}
         self.assertEqual(m.check_command(), CommandStatus.PASSED)
@@ -142,14 +142,14 @@ class TestGPSCommandStateMachine(unittest.TestCase):
     def test_waiting_when_not_moved_enough(self):
         m = self._make_module()
         m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 5m away")
+        m.set_command("move 10m away")
         m.check_command()  # latches start_pos
         self.assertEqual(m.check_command(), CommandStatus.WAITING)
 
     def test_stays_waiting_when_not_moved_enough_over_time(self):
         m = self._make_module()
         m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 5m away")
+        m.set_command("move 10m away")
         m.check_command()  # latches start_pos
         # No client-side timeout — stays WAITING indefinitely until server expires it
         self.assertEqual(m.check_command(), CommandStatus.WAITING)

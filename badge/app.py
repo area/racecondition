@@ -1,4 +1,5 @@
 import app
+import ota
 import time
 
 from machine import I2C
@@ -26,11 +27,18 @@ from .network import NetworkController
 class RaceConditionApp(app.App):
 	def __init__(self, room_client=None):
 		self.button_states = Buttons(self)
+		self.notification = None
+		# Race Condition relies on hexpansion app-discovery APIs added in
+		# tildagonOS v2; on v1 we bail out early and the renderer shows a
+		# "requires v2" screen instead of crashing deeper in setup.
+		self._os_unsupported = ota.get_version().startswith("v1.")
+		self.renderer = Renderer(self)
+		if self._os_unsupported:
+			return
 		self._secret_id = build_secret_id()
 		self.badge_id = derive_public_id(self._secret_id)
 		self.session = GameSession()
 		self.module_registry = ModuleRegistry()
-		self.notification = None
 		self.room_client = room_client if room_client is not None else RoomClient()
 		self.menu = None
 		self._room_list = []
@@ -39,7 +47,6 @@ class RaceConditionApp(app.App):
 		self._qr_active = False
 		self.net = NetworkController(self)
 		self.leds = LedRing(self._write_leds)
-		self.renderer = Renderer(self)
 		self._scan()
 		self._ensure_menu()
 		eventbus.emit(PatternDisable())
@@ -50,6 +57,8 @@ class RaceConditionApp(app.App):
 		eventbus.on(ButtonUpEvent, self._on_button_up, self)
 
 	def _cleanup(self):
+		if self._os_unsupported:
+			return
 		if self.session.in_game:
 			self._leave_room()
 		if self.menu:
@@ -299,9 +308,13 @@ class RaceConditionApp(app.App):
 		self.session.badge_colour = None
 
 	async def background_task(self):
+		if self._os_unsupported:
+			return
 		await self.net.run()
 
 	def update(self, delta):
+		if self._os_unsupported:
+			return
 		if self._test_session is not None:
 			self._test_session.update()
 			if self._test_session.state == "done":

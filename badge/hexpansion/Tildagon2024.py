@@ -1,5 +1,4 @@
 import math
-import random
 import time
 
 from .base import HexpansionModule, CommandStatus

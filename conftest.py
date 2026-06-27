@@ -40,8 +40,14 @@ _uart_stub.any.return_value = 0          # no UART data available by default
 _machine = MagicMock()
 _machine.UART.return_value = _uart_stub
 
+# Default to a supported OS version; tests that exercise the v1 gate override
+# _ota.get_version.return_value to a "v1.*" string.
+_ota = MagicMock()
+_ota.get_version.return_value = "v2.0.0"
+
 for _name, _stub in [
     ("machine",                   _machine),
+    ("ota",                       _ota),
     ("imu",                       MagicMock()),
     ("tildagonos",                MagicMock()),
     ("app_components",            MagicMock()),

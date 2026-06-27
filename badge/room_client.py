@@ -45,20 +45,9 @@ class RoomClient:
         except ImportError as exc:
             self._import_error = str(exc)
             print("[RC:net] requests unavailable: {}".format(exc))
-        try:
-            from .lib import aiohttp_ws as _ws  # type: ignore  # noqa: F401
-            print("[RC:net] aiohttp_ws loaded")
-        except ImportError as exc:
-            print("[RC:net] aiohttp_ws unavailable: {}".format(exc))
 
     def available(self):
         return self._requests is not None
-
-    def _timestamp_ms(self):
-        try:
-            return time.ticks_ms()
-        except AttributeError:
-            return int(time.time() * 1000)
 
     def ws_url(self, room_id):
         # Identity is proven by the secret_id sent in the join message body, not

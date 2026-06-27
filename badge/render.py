@@ -18,6 +18,11 @@ class Renderer:
 		ctx.text_align = ctx.CENTER
 		ctx.text_baseline = ctx.MIDDLE
 
+		if app._os_unsupported:
+			self._draw_os_unsupported(ctx)
+			ctx.restore()
+			return
+
 		if app._test_session is not None:
 			if app._test_session.state == "command":
 				self._draw_testing_command(ctx)
@@ -48,6 +53,17 @@ class Renderer:
 		if app.notification:
 			app.notification.draw(ctx)
 		ctx.restore()
+
+	def _draw_os_unsupported(self, ctx):
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 24
+		ctx.move_to(0, -20).text("tildagonOS")
+		ctx.font_size = 20
+		ctx.rgb(0.85, 0.85, 0.85)
+		ctx.move_to(0, 8).text("v2 required")
+		ctx.font_size = 11
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 40).text("please update your badge")
 
 	def _draw_hold_progress(self, ctx, frac):
 		# Ring around the rim that fills as the cancel button is held, so the
