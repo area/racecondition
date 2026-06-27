@@ -5,7 +5,7 @@ from machine import UART, Pin
 from .base import HexpansionModule, CommandStatus
 
 
-TARGET_DISTANCE_M = 5
+TARGET_DISTANCE_M = 10
 
 
 def _distance_m(lat1, lon1, lat2, lon2):
@@ -36,7 +36,7 @@ def _parse_nmea_rmc(line):
 
 class GPSModule(HexpansionModule):
     VID, PID = 0xCAFE, 0x1295
-    COMMAND_OPTIONS = ["move 5m away"]
+    COMMAND_OPTIONS = ["move 10m away"]
 
     def __init__(self):
         super().__init__()
