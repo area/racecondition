@@ -64,6 +64,8 @@ class Renderer:
 		ctx.font_size = 11
 		ctx.rgb(0.5, 0.5, 0.5)
 		ctx.move_to(0, 40).text("please update your badge")
+		ctx.font_size = 9
+		ctx.move_to(0, 80).text("any key to exit")
 
 	def _draw_hold_progress(self, ctx, frac):
 		# Ring around the rim that fills as the cancel button is held, so the

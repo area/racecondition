@@ -34,6 +34,9 @@ class RaceConditionApp(app.App):
 		self._os_unsupported = ota.get_version().startswith("v1.")
 		self.renderer = Renderer(self)
 		if self._os_unsupported:
+			# The only interaction on the unsupported screen is backing out:
+			# any button drops us back to the launcher.
+			eventbus.on(ButtonDownEvent, self._on_unsupported_button, self)
 			return
 		self._secret_id = build_secret_id()
 		self.badge_id = derive_public_id(self._secret_id)
@@ -58,6 +61,7 @@ class RaceConditionApp(app.App):
 
 	def _cleanup(self):
 		if self._os_unsupported:
+			eventbus.remove(ButtonDownEvent, self._on_unsupported_button, self)
 			return
 		if self.session.in_game:
 			self._leave_room()
@@ -78,6 +82,10 @@ class RaceConditionApp(app.App):
 
 	def _on_remove(self, event):
 		self._scan()
+
+	def _on_unsupported_button(self, event):
+		self.button_states.clear()
+		self.minimise()
 
 	def _is_cancel(self, event):
 		button = getattr(event.button, "parent", None) or event.button
