@@ -24,28 +24,23 @@ from pathlib import Path
 
 from aiohttp import web
 
+# server/ is placed on sys.path by tests/server/conftest.py
+import room_server
+import ws_frame
+from room import Room, MAX_BADGES, COLOURS
+from leaderboard import SqliteLeaderboard
+
+# room_client lives in the badge/ subpackage (the other runtime), not on the
+# server path, so load it directly from its file. Only its module-level imports
+# (json, time) run here; the MicroPython bits are lazy, inside methods.
 import importlib.util
 
-_spec = importlib.util.spec_from_file_location("room_server", Path(__file__).parent / "room_server.py")
-room_server = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(room_server)
-
 _rc_spec = importlib.util.spec_from_file_location(
-    "room_client", Path(__file__).parents[1] / "badge" / "room_client.py"
+    "room_client", Path(__file__).resolve().parents[2] / "badge" / "room_client.py"
 )
 _rc_module = importlib.util.module_from_spec(_rc_spec)
 _rc_spec.loader.exec_module(_rc_module)
 RoomClient = _rc_module.RoomClient
-
-_room_spec = importlib.util.spec_from_file_location("room", Path(__file__).parent / "room.py")
-_room_module = importlib.util.module_from_spec(_room_spec)
-_room_spec.loader.exec_module(_room_module)
-Room = _room_module.Room
-MAX_BADGES = _room_module.MAX_BADGES
-COLOURS = _room_module.COLOURS
-
-from leaderboard import SqliteLeaderboard
-import ws_frame
 
 
 def _make_room(room_id):

@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pytest requests aiohttp
-      - run: python -m pytest server -q
+      - run: python -m pytest tests/server -q
 
   badge-test:
     name: Badge tests
@@ -27,9 +27,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pytest
-      # Badge-app suite — pytest's testpaths (scripts, tests) covers it. The
-      # conftest stubs the MicroPython/hardware modules, so no extra deps.
-      - run: python -m pytest -q
+      # Badge-app suite lives in tests/badge/; its conftest stubs the
+      # MicroPython/hardware modules, so no extra deps. Scoped to tests/badge
+      # so this job stays free of the server's aiohttp/requests dependencies.
+      - run: python -m pytest tests/badge -q
 
   deploy:
     # Gate the deploy on both suites — nothing ships unless everything is green.

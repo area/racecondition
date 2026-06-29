@@ -1,21 +1,9 @@
 #!/usr/bin/env python3
-import importlib.util
-import sys
 import unittest
-from pathlib import Path
 
-_scripts_dir = str(Path(__file__).parent)
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
-
-_spec = importlib.util.spec_from_file_location("room", Path(__file__).parent / "room.py")
-_room_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_room_mod)
-
-Room = _room_mod.Room
-ROUND_DURATION_S = _room_mod.ROUND_DURATION_S
-COLOURS = _room_mod.COLOURS
-
+# server/ is placed on sys.path by tests/server/conftest.py
+import room as _room_mod
+from room import Room, ROUND_DURATION_S, COLOURS
 from leaderboard import SqliteLeaderboard
 
 GPS_CAPS = [{"module": "GPS", "commands": ["move 5m away"]}]

@@ -2,13 +2,8 @@
 import os
 import tempfile
 import unittest
-from pathlib import Path
-import sys
 
-_scripts_dir = str(Path(__file__).parent)
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
-
+# server/ is placed on sys.path by tests/server/conftest.py
 from leaderboard import SqliteLeaderboard
 
 _ENTRY_A = {

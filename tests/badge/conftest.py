@@ -70,7 +70,8 @@ for _name, _stub in [
 # firmware imports the published subpackage as `apps.<name>.badge.*`.
 
 _badge_stub = types.ModuleType("badge")
-_badge_stub.__path__ = [str(Path(__file__).parent / "badge")]
+# conftest lives at tests/badge/; the real badge package is at the repo root.
+_badge_stub.__path__ = [str(Path(__file__).resolve().parents[2] / "badge")]
 _badge_stub.__package__ = "badge"
 sys.modules["badge"] = _badge_stub
 
