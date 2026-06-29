@@ -3,7 +3,12 @@ import unittest
 from badge.session import GameSession
 from badge.hexpansion import decorate_command
 from badge.hexpansion.MegaDrive import PRESS_VERBS as MEGADRIVE_VERBS
-from badge.hexpansion.Tildagon2024 import PRESS_VERBS, GESTURE_PHRASES
+from badge.hexpansion.Tildagon2024 import (
+    PRESS_VERBS,
+    GESTURE_PHRASES,
+    BUTTON_ARROW_NAMES,
+)
+from app_components import symbols
 
 
 class TestDecorateCommand(unittest.TestCase):
@@ -15,11 +20,13 @@ class TestDecorateCommand(unittest.TestCase):
             self.assertIn(verb, MEGADRIVE_VERBS)
             self.assertEqual(command, "a")
 
-    def test_tildagon_button_gets_press_verb(self):
-        phrase = decorate_command("Tildagon 2024", "b")
-        verb, _, command = phrase.partition(" ")
-        self.assertIn(verb, PRESS_VERBS)
-        self.assertEqual(command, "b")
+    def test_tildagon_button_shown_as_arrow_glyph(self):
+        # Buttons a-f display the arrow pointing at their position, not the letter.
+        for command, arrow_name in BUTTON_ARROW_NAMES.items():
+            phrase = decorate_command("Tildagon 2024", command)
+            verb, _, glyph = phrase.partition(" ")
+            self.assertIn(verb, PRESS_VERBS)
+            self.assertEqual(glyph, symbols["arrows"][arrow_name])
 
     def test_tildagon_gesture_is_a_whole_phrase(self):
         # Gestures read as a phrase, never "<verb> shake".

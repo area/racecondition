@@ -50,13 +50,31 @@ _ota.get_version.return_value = "v2.0.0"
 _settings = MagicMock()
 _settings.get.side_effect = lambda key, default=None: default
 
+# app_components is firmware-only, but decorate() reads symbols["arrows"] from it,
+# so give the mock the real arrow glyphs (mirrors app_components/tokens.py).
+_app_components = MagicMock()
+_app_components.symbols = {
+    "arrows": {
+        "left": "←",
+        "up": "↑",
+        "right": "→",
+        "down": "↓",
+        "left_right": "↔",
+        "up_down": "↕",
+        "north_west": "↖",
+        "north_east": "↗",
+        "south_east": "↘",
+        "south_west": "↙",
+    },
+}
+
 for _name, _stub in [
     ("machine",                   _machine),
     ("ota",                       _ota),
     ("settings",                  _settings),
     ("imu",                       MagicMock()),
     ("tildagonos",                MagicMock()),
-    ("app_components",            MagicMock()),
+    ("app_components",            _app_components),
     ("events",                    MagicMock()),
     ("events.input",              MagicMock()),
     ("system",                    MagicMock()),

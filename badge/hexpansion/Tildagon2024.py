@@ -5,6 +5,8 @@ from .base import HexpansionModule, CommandStatus, random_verb
 
 import imu
 
+from app_components import symbols
+
 
 PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
 
@@ -12,6 +14,20 @@ PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
 GESTURE_PHRASES = {
     "shake": ("Shake it!", "Give it a shake", "Rattle it"),
     "flip": ("Flip it", "Turn it over", "Flip it upside down"),
+}
+
+# The six face buttons sit in a ring; show the arrow that points at each one so
+# players orient to the badge layout instead of the tiny hardware letters. We map
+# each letter to a named entry in the firmware's symbols["arrows"] table rather
+# than hardcoding the glyph, so the codepoints stay correct against EMFCampFont.
+# The bare letter is still what's sent to the server (see COMMAND_OPTIONS).
+BUTTON_ARROW_NAMES = {
+    "a": "up",
+    "b": "north_east",
+    "c": "south_east",
+    "d": "down",
+    "e": "south_west",
+    "f": "north_west",
 }
 
 
@@ -27,7 +43,9 @@ class Tildagon2024Module(HexpansionModule):
         phrases = GESTURE_PHRASES.get(command)
         if phrases:
             return random_verb(phrases)
-        return "{} {}".format(random_verb(PRESS_VERBS), command)
+        arrow_name = BUTTON_ARROW_NAMES.get(command)
+        glyph = symbols["arrows"][arrow_name] if arrow_name else command
+        return "{} {}".format(random_verb(PRESS_VERBS), glyph)
 
     def __init__(self):
         self._has_hexpansions = False
