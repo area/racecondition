@@ -1,5 +1,6 @@
 import app
 import ota
+import settings
 import time
 
 from machine import I2C
@@ -304,8 +305,11 @@ class RaceConditionApp(app.App):
 		self.leds.set_base(BADGE_COLOURS.get(colour, (0, 0, 0)))
 
 	def _write_leds(self, frame):
-		for i, rgb in enumerate(frame):
-			tildagonos.leds[i + 1] = rgb
+		# Our palette is full-range; honour the user's "Pattern brightness"
+		# setting herea
+		b = settings.get("pattern_brightness", 0.1)
+		for i, (r, g, bl) in enumerate(frame):
+			tildagonos.leds[i + 1] = (int(r * b), int(g * b), int(bl * b))
 		tildagonos.leds.write()
 
 	def _leave_room(self):

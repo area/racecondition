@@ -3,9 +3,10 @@ import time
 # The badge ring is 12 LEDs (tildagonos.leds indices 1..12).
 LED_COUNT = 12
 
-# Flash colours, scaled to the same brightness range as BADGE_COLOURS (max 40).
-FLASH_GREEN = (0, 40, 0)
-FLASH_RED = (40, 0, 0)
+# Flash colours, full-range like BADGE_COLOURS; the user's "Pattern brightness"
+# setting is applied at the hardware write in app.py.
+FLASH_GREEN = (0, 255, 0)
+FLASH_RED = (255, 0, 0)
 
 FLASH_DURATION_MS = 850
 

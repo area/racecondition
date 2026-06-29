@@ -1,13 +1,18 @@
 # Red and green are deliberately excluded: the LED ring uses a red fill for a
 # failed/timed-out command and a green fill for a passed one, so a red or green
 # badge colour would be indistinguishable from that feedback.
+#
+# These are full-range (0-255) reference colours; the user's "Pattern
+# brightness" setting is applied at the hardware write in app.py, matching the
+# firmware's own pattern-display convention. The per-hue values keep their
+# deliberate perceptual balance (blue reads dimmer, so it's pushed to full).
 BADGE_COLOURS = {
-    "white":  (30, 30, 30),
-    "cyan":   ( 0, 30, 30),
-    "blue":   ( 0,  0, 40),
-    "yellow": (30, 30,  0),
-    "purple": (25,  0, 25),
-    "orange": (40, 15,  0),
+    "white":  (191, 191, 191),
+    "cyan":   (  0, 191, 191),
+    "blue":   (  0,   0, 255),
+    "yellow": (191, 191,   0),
+    "purple": (159,   0, 159),
+    "orange": (255,  96,   0),
 }
 
 # Canonical ordered palette. The server can't import this module (it ships only
