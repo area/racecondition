@@ -16,13 +16,34 @@ BUTTON_ARROW_NAMES = {
     "down": "down",
     "left": "left",
     "right": "right",
+    "up_left": "north_west",
+    "up_right": "north_east",
+    "down_left": "south_west",
+    "down_right": "south_east",
+}
+
+DIRECTIONS = frozenset(("up", "down", "left", "right"))
+
+# A diagonal is satisfied only while both of its directions are held at once,
+# which is exactly what a real D-pad does when you push into a corner. A cardinal
+# is satisfied only while exactly its one direction is held — pushing into a
+# corner holds two directions and so must not pass a single-direction command.
+DIAGONAL_COMMANDS = {
+    "up_left": frozenset(("up", "left")),
+    "up_right": frozenset(("up", "right")),
+    "down_left": frozenset(("down", "left")),
+    "down_right": frozenset(("down", "right")),
 }
 
 
 SIX_BUTTON_ONLY = {"x", "y", "z", #"mode"
                    }
 
-THREE_BUTTON_COMMANDS = ["start", "up", "down", "left", "right", "a", "b", "c"]
+THREE_BUTTON_COMMANDS = [
+    "start", "up", "down", "left", "right",
+    "up_left", "up_right", "down_left", "down_right",
+    "a", "b", "c",
+]
 SIX_BUTTON_COMMANDS = THREE_BUTTON_COMMANDS + [
     "x",
     "y",
@@ -50,6 +71,13 @@ class MegaDriveModule(HexpansionModule):
         super().reset()
         self.is_six_button = False
         self.COMMAND_OPTIONS = THREE_BUTTON_COMMANDS
+        self._held = set()
+
+    def set_command(self, command):
+        # Start each command with a clean view of held buttons, so a press left
+        # over from the previous command can't satisfy a fresh diagonal.
+        self._held = set()
+        return super().set_command(command)
 
     def on_button_down(self, event):
         button_name = self._get_button_name(event)
@@ -58,8 +86,31 @@ class MegaDriveModule(HexpansionModule):
         if button_name in SIX_BUTTON_ONLY and not self.is_six_button:
             self.is_six_button = True
             self.COMMAND_OPTIONS = SIX_BUTTON_COMMANDS
-        if button_name == self.current_command:
+        self._held.add(button_name)
+        # Directional commands are judged in check_command against the full set of
+        # held directions, so a corner press (two directions at once) can't latch a
+        # cardinal before its partner press has arrived. Plain buttons latch here.
+        if self._required_directions() is None and button_name == self.current_command:
             self.last_status = CommandStatus.PASSED
+
+    def on_button_up(self, event):
+        button_name = self._get_button_name(event)
+        if button_name is None:
+            return
+        self._held.discard(button_name)
+
+    def check_command(self):
+        required = self._required_directions()
+        if required is not None and (self._held & DIRECTIONS) == required:
+            self.last_status = CommandStatus.PASSED
+        return self.last_status
+
+    def _required_directions(self):
+        # The exact set of D-pad directions that must be held for the current
+        # command, or None if the command isn't directional (a plain button).
+        if self.current_command in DIRECTIONS:
+            return frozenset((self.current_command,))
+        return DIAGONAL_COMMANDS.get(self.current_command)
 
     def _get_button_name(self, event):
         button = getattr(event, "button", None)

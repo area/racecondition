@@ -43,6 +43,13 @@ class HexpansionModule:
     def on_button_down(self, event):
         pass
 
+    # Override only if the module needs to know when a button is released — e.g.
+    # to track which buttons are currently held for a chord/diagonal. Most
+    # modules only care about presses and can ignore this. Forwarded for every
+    # non-cancel button release while a round is in progress (see app.py).
+    def on_button_up(self, event):
+        pass
+
     def check_command(self) -> str:
         return self.last_status
 

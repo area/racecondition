@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from badge.hexpansion.base import CommandStatus
-from badge.hexpansion.MegaDrive import MegaDriveModule
+from badge.hexpansion.MegaDrive import MegaDriveModule, DIAGONAL_COMMANDS
 from badge.hexpansion.GPS import GPSModule, _distance_m, TARGET_DISTANCE_M
 from badge.hexpansion.Tildagon2024 import Tildagon2024Module
 
@@ -54,12 +54,51 @@ class TestMegaDriveModule(unittest.TestCase):
         for cmd in MegaDriveModule.COMMAND_OPTIONS:
             m = MegaDriveModule()
             m.set_command(cmd)
-            m.on_button_down(_sega(cmd))
+            for direction in DIAGONAL_COMMANDS.get(cmd, (cmd,)):
+                m.on_button_down(_sega(direction))
             self.assertEqual(m.check_command(), CommandStatus.PASSED, msg=cmd)
 
     def test_unsupported_command_raises(self):
         with self.assertRaises(ValueError):
             self.m.set_command("turbo")
+
+    def test_diagonal_passes_when_both_directions_held(self):
+        self.m.set_command("up_left")
+        self.m.on_button_down(_sega("up"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        self.m.on_button_down(_sega("left"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_diagonal_stays_waiting_with_only_one_direction(self):
+        self.m.set_command("down_right")
+        self.m.on_button_down(_sega("down"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_diagonal_stays_waiting_if_first_released_before_second(self):
+        # Releasing up before pressing left is a roll, not a corner press.
+        self.m.set_command("up_left")
+        self.m.on_button_down(_sega("up"))
+        self.m.on_button_up(_sega("up"))
+        self.m.on_button_down(_sega("left"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_cardinal_requires_only_its_direction_held(self):
+        # Command is "up"; a corner press (up + left held) must NOT pass it.
+        self.m.set_command("up")
+        self.m.on_button_down(_sega("up"))
+        self.m.on_button_down(_sega("left"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        # Releasing the partner leaves only "up" held, which then passes.
+        self.m.on_button_up(_sega("left"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_set_command_clears_stale_held_buttons(self):
+        # A direction held from a previous command must not satisfy a new diagonal.
+        self.m.set_command("up")
+        self.m.on_button_down(_sega("up"))
+        self.m.set_command("up_left")
+        self.m.on_button_down(_sega("left"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
 
 # ── GPS pure functions ────────────────────────────────────────────────────────

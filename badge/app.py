@@ -129,6 +129,10 @@ class RaceConditionApp(app.App):
 					self.session.expected_module.on_button_down(self._cancel_down_event)
 			self.session.cancel_hold_start = None
 			self._cancel_down_event = None
+			return
+
+		if self.session.in_round and self.session.expected_module:
+			self.session.expected_module.on_button_up(event)
 
 	def _main_menu_items(self):
 		return ["Join Room", "Create Room", "Set name", "Test modules", "Quit"]
