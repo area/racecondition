@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from badge.hexpansion.base import CommandStatus, HexpansionModule
+from badge.hexpansion.base import CommandStatus
 from badge.hexpansion.MegaDrive import MegaDriveModule
-from badge.hexpansion.GPS import GPSModule, _parse_nmea_rmc, _distance_m, TARGET_DISTANCE_M
+from badge.hexpansion.GPS import GPSModule, _distance_m, TARGET_DISTANCE_M
 from badge.hexpansion.Tildagon2024 import Tildagon2024Module
 
 
@@ -63,35 +63,8 @@ class TestMegaDriveModule(unittest.TestCase):
 
 
 # ── GPS pure functions ────────────────────────────────────────────────────────
-
-class TestParseNmeaRmc(unittest.TestCase):
-    VALID_GNRMC = "$GNRMC,123519,A,5130.0000,N,00007.0000,W,0.0,0.0,230394,,,A*6A"
-    VALID_GPRMC = "$GPRMC,123519,A,5130.0000,N,00007.0000,W,0.0,0.0,230394,,,A*6A"
-
-    def test_valid_gnrmc_returns_fix(self):
-        result = _parse_nmea_rmc(self.VALID_GNRMC)
-        self.assertIsNotNone(result)
-        self.assertAlmostEqual(result["lat"], 51.5, places=3)
-
-    def test_valid_gprmc_accepted(self):
-        self.assertIsNotNone(_parse_nmea_rmc(self.VALID_GPRMC))
-
-    def test_invalid_status_returns_none(self):
-        invalid = self.VALID_GNRMC.replace(",A,", ",V,")
-        self.assertIsNone(_parse_nmea_rmc(invalid))
-
-    def test_non_rmc_sentence_returns_none(self):
-        self.assertIsNone(_parse_nmea_rmc("$GPGGA,123519,5130.0000,N,00007.0000,W,1,08,0.9,545.4,M,,,,*47"))
-
-    def test_west_longitude_is_negative(self):
-        result = _parse_nmea_rmc(self.VALID_GNRMC)
-        self.assertLess(result["lon"], 0)
-
-    def test_south_latitude_is_negative(self):
-        south = "$GNRMC,123519,A,5130.0000,S,00007.0000,E,0.0,0.0,230394,,,A*6A"
-        result = _parse_nmea_rmc(south)
-        self.assertLess(result["lat"], 0)
-
+# NMEA parsing now lives in the GPS hexpansion's own firmware app, which exposes
+# a parsed (lat, lon) .position; the badge no longer parses sentences itself.
 
 class TestDistanceM(unittest.TestCase):
     def test_same_point_is_zero(self):
@@ -111,48 +84,87 @@ class TestDistanceM(unittest.TestCase):
 
 # ── GPS command state machine ─────────────────────────────────────────────────
 
+class _FakeGPSApp:
+    """Stand-in for the GPS hexpansion's running firmware app.
+
+    Exposes a parsed ``.position`` of ``(lat, lon)``, or ``None`` while it is
+    still waiting for a fix — exactly the surface GPSModule reads.
+    """
+    def __init__(self, position=None):
+        self.position = position
+
+
 class TestGPSCommandStateMachine(unittest.TestCase):
-    def _make_module(self):
+    CMD = "Move 10m away"
+
+    def _make_module(self, position=None):
         m = GPSModule()
-        m._uart.any.return_value = 0  # silence the UART mock
+        # Inject the running hexpansion app directly; with _gps set, GPSModule
+        # skips the get_app_by_vid_pid lookup and reads .position from this.
+        m._gps = _FakeGPSApp(position)
         return m
 
     def test_waiting_when_no_fix(self):
-        m = self._make_module()
-        m.set_command("move 10m away")
+        m = self._make_module()  # no fix yet
+        m.set_command(self.CMD)
         self.assertEqual(m.check_command(), CommandStatus.WAITING)
 
-    def test_latches_start_pos_on_first_fix(self):
-        m = self._make_module()
-        m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 10m away")
-        # start_pos was None at set_command time; first check latches it
+    def test_latches_start_pos_when_fix_arrives_after_command(self):
+        m = self._make_module()  # no fix at set_command time
+        m.set_command(self.CMD)
+        self.assertIsNone(m._start_pos)
+        m._gps.position = (51.5, -0.1)  # fix arrives later
         result = m.check_command()
         self.assertEqual(result, CommandStatus.WAITING)
-        self.assertIsNotNone(m._start_pos)
+        self.assertEqual(m._start_pos, (51.5, -0.1))  # latched
 
     def test_passes_when_moved_far_enough(self):
-        m = self._make_module()
-        m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 10m away")
-        m.check_command()  # latches start_pos
-        m._current_pos = {"lat": 51.5 + TARGET_DISTANCE_M / 111111 + 0.0001, "lon": -0.1}
+        m = self._make_module((51.5, -0.1))  # start_pos snapshot at set_command
+        m.set_command(self.CMD)
+        m._gps.position = (51.5 + TARGET_DISTANCE_M / 111111 + 0.0001, -0.1)
         self.assertEqual(m.check_command(), CommandStatus.PASSED)
 
     def test_waiting_when_not_moved_enough(self):
-        m = self._make_module()
-        m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 10m away")
-        m.check_command()  # latches start_pos
+        m = self._make_module((51.5, -0.1))
+        m.set_command(self.CMD)
+        self.assertEqual(m.check_command(), CommandStatus.WAITING)
+
+    def test_waiting_when_fix_lost_after_start(self):
+        # If the fix drops out mid-command we hold at WAITING rather than crash.
+        m = self._make_module((51.5, -0.1))
+        m.set_command(self.CMD)
+        m._gps.position = None  # lost fix
         self.assertEqual(m.check_command(), CommandStatus.WAITING)
 
     def test_stays_waiting_when_not_moved_enough_over_time(self):
-        m = self._make_module()
-        m._current_pos = {"lat": 51.5, "lon": -0.1}
-        m.set_command("move 10m away")
-        m.check_command()  # latches start_pos
+        m = self._make_module((51.5, -0.1))
+        m.set_command(self.CMD)
+        m.check_command()
         # No client-side timeout — stays WAITING indefinitely until server expires it
         self.assertEqual(m.check_command(), CommandStatus.WAITING)
+
+
+class TestGPSCapabilities(unittest.TestCase):
+    CMD = "Move 10m away"
+
+    def test_command_lookup_is_lazy_and_cached(self):
+        m = GPSModule()
+        fake = _FakeGPSApp((51.5, -0.1))
+        with patch("badge.hexpansion.GPS.get_app_by_vid_pid", return_value=fake) as lookup:
+            self.assertEqual(m._current_pos(), (51.5, -0.1))
+            lookup.assert_called_once_with(GPSModule.VID, GPSModule.PID)
+            m._current_pos()  # cached — no second lookup
+            lookup.assert_called_once()
+
+    def test_no_command_offered_without_fix(self):
+        m = GPSModule()
+        m._gps = _FakeGPSApp(None)
+        self.assertEqual(m.get_capabilities()["commands"], [])
+
+    def test_command_offered_once_fixed(self):
+        m = GPSModule()
+        m._gps = _FakeGPSApp((51.5, -0.1))
+        self.assertIn(self.CMD, m.get_capabilities()["commands"])
 
 
 # ── Tildagon2024 ──────────────────────────────────────────────────────────────

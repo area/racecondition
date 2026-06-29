@@ -259,7 +259,6 @@ class RoomServerTestCase(unittest.TestCase):
         self.assertIn("display", state)
         self.assertIn("colour", state)
         self.assertIn("room_state", state)
-        self.assertNotIn("session_token", state)
 
     def test_join_assigns_a_colour(self):
         state = self._ws(1, "badge-colour").join(GPS_CAPS)

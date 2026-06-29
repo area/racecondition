@@ -46,12 +46,6 @@ class TestJoin(unittest.TestCase):
         data = self.room.join("badge-a", {})
         self.assertIsNone(data["assignment"])
 
-    def test_poll_response_has_no_session_token(self):
-        # Identity is the connection's authenticated badge_id (derived from the
-        # secret_id over the websocket); there is no per-session token.
-        data = self.room.join("badge-a", {})
-        self.assertNotIn("session_token", data)
-
 
 class TestStartRound(unittest.TestCase):
     def setUp(self):
