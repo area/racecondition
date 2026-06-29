@@ -1,3 +1,5 @@
+import random
+
 from ..hexpansion_names import get_friendly_name
 
 
@@ -7,14 +9,32 @@ class CommandStatus:
     WAITING = "waiting"
 
 
+def random_verb(verbs):
+    # getrandbits is the one PRNG primitive guaranteed on the badge's
+    # MicroPython build (see lib/aiohttp_ws.py); random.choice may be absent.
+    return verbs[random.getrandbits(16) % len(verbs)]
+
+
 class HexpansionModule:
     VID = None
     PID = None
 
     COMMAND_OPTIONS = []
 
-    def friendly_name(self):
-        return get_friendly_name(self.VID, self.PID)
+    @classmethod
+    def friendly_name(cls):
+        return get_friendly_name(cls.VID, cls.PID)
+
+    # Turn a bare command token into the phrase shown large on screen and read
+    # aloud ("a" -> "Smash a"). Display-only flavour: the command sent to and
+    # received from the server is always the bare token, so this never affects
+    # results. A classmethod because the instruction describes another badge's
+    # assignment, whose module may not be plugged into this badge — we only have
+    # the class, looked up by name. Default is no decoration; modules with
+    # button- or gesture-style commands override.
+    @classmethod
+    def decorate(cls, command):
+        return command
 
     # I would expect every hexpansion to need to override one, or both, of the on_button_down and
     # check_command methods. If you override on_button_down, you want to set self.last_status to CommandStatus.PASSED

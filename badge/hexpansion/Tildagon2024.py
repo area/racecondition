@@ -1,16 +1,33 @@
 import math
 import time
 
-from .base import HexpansionModule, CommandStatus
+from .base import HexpansionModule, CommandStatus, random_verb
 
 import imu
+
+
+PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
+
+# Gesture commands read as a whole phrase, not "<verb> shake".
+GESTURE_PHRASES = {
+    "shake": ("Shake it!", "Give it a shake", "Rattle it"),
+    "flip": ("Flip it", "Turn it over", "Flip it upside down"),
+}
 
 
 class Tildagon2024Module(HexpansionModule):
     COMMAND_OPTIONS = ["flip", "a", "b", "c", "d", "e", "f", "shake"]
 
-    def friendly_name(self):
+    @classmethod
+    def friendly_name(cls):
         return "Tildagon 2024"
+
+    @classmethod
+    def decorate(cls, command):
+        phrases = GESTURE_PHRASES.get(command)
+        if phrases:
+            return random_verb(phrases)
+        return "{} {}".format(random_verb(PRESS_VERBS), command)
 
     def __init__(self):
         self._has_hexpansions = False

@@ -11,6 +11,19 @@ MODULE_TYPES = [
 ]
 
 
+def decorate_command(module_name, command):
+	# Look the module up by friendly name (the instruction may be for a module
+	# not plugged into this badge, so we work off the class, not an instance)
+	# and let it turn the bare command into its display phrase. Unknown modules
+	# fall back to the raw command.
+	if not command:
+		return command
+	for module_type in MODULE_TYPES:
+		if module_type.friendly_name() == module_name:
+			return module_type.decorate(command)
+	return command
+
+
 class ModuleRegistry:
 	def __init__(self, module_types=None):
 		self.module_types = module_types or MODULE_TYPES
@@ -53,4 +66,5 @@ class ModuleRegistry:
 __all__ = [
 	"CommandStatus",
 	"ModuleRegistry",
+	"decorate_command",
 ]

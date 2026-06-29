@@ -160,7 +160,7 @@ class Renderer:
 			ctx.move_to(0, -50).text(session.display_target_colour)
 		ctx.font_size = 24
 		ctx.move_to(0, -30).text(session.display_module_name or "")
-		ctx.move_to(0, -4).text(session.display_command or "...")
+		ctx.move_to(0, -4).text(session.display_instruction or "...")
 		frac = self._instruction_fraction()
 		if frac is not None:
 			ctx.rgb(0.2, 0.2, 0.2)

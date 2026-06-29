@@ -45,9 +45,15 @@ _machine.UART.return_value = _uart_stub
 _ota = MagicMock()
 _ota.get_version.return_value = "v2.0.0"
 
+# The badge `settings` module is a key/default store; return the caller's
+# default so brightness math (settings.get("pattern_brightness", 0.1)) works.
+_settings = MagicMock()
+_settings.get.side_effect = lambda key, default=None: default
+
 for _name, _stub in [
     ("machine",                   _machine),
     ("ota",                       _ota),
+    ("settings",                  _settings),
     ("imu",                       MagicMock()),
     ("tildagonos",                MagicMock()),
     ("app_components",            MagicMock()),

@@ -1,4 +1,7 @@
-from .base import HexpansionModule, CommandStatus
+from .base import HexpansionModule, CommandStatus, random_verb
+
+
+PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
 
 
 SIX_BUTTON_ONLY = {"x", "y", "z", #"mode"
@@ -16,6 +19,11 @@ SIX_BUTTON_COMMANDS = THREE_BUTTON_COMMANDS + [
 class MegaDriveModule(HexpansionModule):
     VID, PID = 0xCAFE, 0x5E6A
     COMMAND_OPTIONS = THREE_BUTTON_COMMANDS
+
+    @classmethod
+    def decorate(cls, command):
+        # Every MegaDrive command is a button, so always add a press verb.
+        return "{} {}".format(random_verb(PRESS_VERBS), command)
 
     def __init__(self):
         super().__init__()

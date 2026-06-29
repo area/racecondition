@@ -1,7 +1,7 @@
 import time
 
 from .constants import CANCEL_HOLD_MS
-from .hexpansion import CommandStatus
+from .hexpansion import CommandStatus, decorate_command
 
 
 class GameSession:
@@ -14,6 +14,8 @@ class GameSession:
         self.expected_command = None
         self.display_module_name = None
         self.display_command = None
+        self.display_instruction = None
+        self.display_assignment_id = None
         self.display_target_colour = None
         self.display_time_remaining_s = None
         self.display_timeout_s = None
@@ -57,6 +59,8 @@ class GameSession:
     def clear_display(self):
         self.display_module_name = None
         self.display_command = None
+        self.display_instruction = None
+        self.display_assignment_id = None
         self.display_target_colour = None
         self.display_time_remaining_s = None
         self.display_timeout_s = None
@@ -111,8 +115,23 @@ class GameSession:
         if not display:
             self.clear_display()
             return
-        self.display_module_name = display.get("module")
-        self.display_command = display.get("command")
+        module = display.get("module")
+        command = display.get("command")
+        assignment_id = display.get("id")
+        # Re-randomise the display verb on each new assignment (identified by
+        # id), so the same command issued twice in a row still gets a fresh
+        # verb. Keeping it keyed on a changing id means it stays put across
+        # frames and across full-state re-pushes of the same assignment. If the
+        # server sends no id, fall back to the instruction's (module, command).
+        if assignment_id is not None:
+            changed = assignment_id != self.display_assignment_id
+        else:
+            changed = module != self.display_module_name or command != self.display_command
+        if changed:
+            self.display_instruction = decorate_command(module, command)
+        self.display_assignment_id = assignment_id
+        self.display_module_name = module
+        self.display_command = command
         colour = display.get("target_colour")
         self.display_target_colour = colour[0].upper() + colour[1:] if colour else None
         self.display_time_remaining_s = display.get("time_remaining_s")

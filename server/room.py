@@ -334,6 +334,7 @@ class Room:
         time_remaining = max(0.0, assignment.timeout_s - (now - assignment.issued_at))
         target_slot = self._badges.get(target_id)
         return {
+            "id": assignment.id,
             "module": assignment.module,
             "command": assignment.command,
             "target_colour": target_slot.colour if target_slot else None,
