@@ -1,7 +1,22 @@
 from .base import HexpansionModule, CommandStatus, random_verb
 
+from app_components import symbols
+
 
 PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
+
+
+# The D-pad directions show the matching arrow glyph so players orient to the
+# pad instead of reading the word. We map each direction to a named entry in the
+# firmware's symbols["arrows"] table rather than hardcoding the glyph, so the
+# codepoints stay correct against EMFCampFont. The bare direction is still what's
+# sent to the server (see THREE_BUTTON_COMMANDS).
+BUTTON_ARROW_NAMES = {
+    "up": "up",
+    "down": "down",
+    "left": "left",
+    "right": "right",
+}
 
 
 SIX_BUTTON_ONLY = {"x", "y", "z", #"mode"
@@ -23,7 +38,9 @@ class MegaDriveModule(HexpansionModule):
     @classmethod
     def decorate(cls, command):
         # Every MegaDrive command is a button, so always add a press verb.
-        return "{} {}".format(random_verb(PRESS_VERBS), command)
+        arrow_name = BUTTON_ARROW_NAMES.get(command)
+        glyph = symbols["arrows"][arrow_name] if arrow_name else command
+        return "{} {}".format(random_verb(PRESS_VERBS), glyph)
 
     def __init__(self):
         super().__init__()

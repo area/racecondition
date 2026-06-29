@@ -2,7 +2,10 @@ import unittest
 
 from badge.session import GameSession
 from badge.hexpansion import decorate_command
-from badge.hexpansion.MegaDrive import PRESS_VERBS as MEGADRIVE_VERBS
+from badge.hexpansion.MegaDrive import (
+    PRESS_VERBS as MEGADRIVE_VERBS,
+    BUTTON_ARROW_NAMES as MEGADRIVE_ARROW_NAMES,
+)
 from badge.hexpansion.Tildagon2024 import (
     PRESS_VERBS,
     GESTURE_PHRASES,
@@ -19,6 +22,14 @@ class TestDecorateCommand(unittest.TestCase):
             verb, _, command = phrase.partition(" ")
             self.assertIn(verb, MEGADRIVE_VERBS)
             self.assertEqual(command, "a")
+
+    def test_megadrive_dpad_shown_as_arrow_glyph(self):
+        # D-pad directions display the matching arrow, not the word.
+        for command, arrow_name in MEGADRIVE_ARROW_NAMES.items():
+            phrase = decorate_command("MegaDrive", command)
+            verb, _, glyph = phrase.partition(" ")
+            self.assertIn(verb, MEGADRIVE_VERBS)
+            self.assertEqual(glyph, symbols["arrows"][arrow_name])
 
     def test_tildagon_button_shown_as_arrow_glyph(self):
         # Buttons a-f display the arrow pointing at their position, not the letter.
