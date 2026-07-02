@@ -3,7 +3,7 @@ import unittest
 
 # server/ is placed on sys.path by tests/server/conftest.py
 import room as _room_mod
-from room import Room, ROUND_DURATION_S, COLOURS
+from room import Room, ROUND_DURATION_S, COLOURS, MAX_BADGES
 from leaderboard import SqliteLeaderboard
 
 GPS_CAPS = [{"module": "GPS", "commands": ["move 5m away"]}]
@@ -33,6 +33,37 @@ class TestJoin(unittest.TestCase):
     def test_waiting_state_has_no_assignment(self):
         data = self.room.join("badge-a", {})
         self.assertIsNone(data["assignment"])
+
+
+class TestPollReAdd(unittest.TestCase):
+    """A poll from an unknown badge (e.g. stale-pruned but its websocket
+    survived) re-adds it, so it must respect the same capacity invariant as
+    join — otherwise a full room grows past MAX_BADGES with duplicate colours."""
+
+    def setUp(self):
+        self.room = _room(1)
+
+    def _fill_room(self):
+        for i in range(MAX_BADGES):
+            self.room.join("badge-{}".format(i), {})
+
+    def test_poll_readds_unknown_badge_when_space(self):
+        self.room.join("badge-a", {})
+        data = self.room.poll("badge-b", GPS_CAPS)
+        self.assertNotIn("error", data)
+        self.assertEqual(data["badge_count"], 2)
+
+    def test_poll_from_unknown_badge_when_full_returns_error(self):
+        self._fill_room()
+        data = self.room.poll("badge-late", GPS_CAPS)
+        self.assertIn("error", data)
+        colours = [b["colour"] for b in self.room.admin_snapshot()["badges"]]
+        self.assertEqual(len(colours), len(set(colours)))
+
+    def test_poll_from_known_badge_when_full_is_fine(self):
+        self._fill_room()
+        data = self.room.poll("badge-0", GPS_CAPS)
+        self.assertNotIn("error", data)
 
 
 class TestStartRound(unittest.TestCase):

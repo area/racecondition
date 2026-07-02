@@ -9,5 +9,5 @@ class = "RaceConditionApp"
 author = "Alex Rea"
 license = "MIT"
 url = "https://github.com/area/racecondition"
-description = "Frantic co-op command game for Tildagon badges. Shout orders, hit buttons and beat the clock together using your hexpansions."
+description = "A co-operative shouting game for 1-6 players"
 version = 1

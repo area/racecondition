@@ -66,6 +66,7 @@ class BadgeSlot:
 class Room:
     def __init__(self, room_id, leaderboard=None, user_registry=None):
         self.room_id = room_id
+        self.created_at = time.monotonic()
         self._lock = Lock()
         self._leaderboard = leaderboard if leaderboard is not None else SqliteLeaderboard()
         self._user_registry = user_registry
@@ -84,6 +85,12 @@ class Room:
     def poll(self, badge_id, capabilities, result=None):
         with self._lock:
             self._prune_stale()
+            # A poll from an unknown badge is a re-add (e.g. stale-pruned but its
+            # websocket survived), so it must pass the same capacity check as
+            # join — otherwise a full room grows past MAX_BADGES and _set_badge's
+            # colour fallback hands out duplicates.
+            if badge_id not in self._badges and len(self._badges) >= MAX_BADGES:
+                return {"room_id": self.room_id, "error": "Room is full"}
             norm = _normalize_capabilities(capabilities) if capabilities is not None else None
             self._set_badge(badge_id, norm)
             self._check_expiry()

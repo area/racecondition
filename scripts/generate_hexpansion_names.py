@@ -11,7 +11,7 @@ from pathlib import Path
 # Temporary aliases for VID/PID pairs that should resolve to known devices
 # even when not present in EEPROM manifests yet.
 MANUAL_FRIENDLY_NAME_OVERRIDES: dict[tuple[int, int], str] = {
-    (0xCAFE, 0x5E6A): "MegaDrive",
+    # (0xCAFE, 0x5E6A): "MegaDrive", Was Megadrive, is no longer. Left as example.
 }
 
 

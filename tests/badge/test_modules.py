@@ -2,7 +2,14 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from badge.hexpansion.base import CommandStatus
-from badge.hexpansion.MegaDrive import MegaDriveModule, DIAGONAL_COMMANDS
+from badge.hexpansion import decorate_command
+from badge.hexpansion.MegaDrive import (
+    MegaDriveModule,
+    DIAGONAL_COMMANDS,
+    DIRECTIONS,
+    COMBOS,
+    COMBO_STEP_MS,
+)
 from badge.hexpansion.GPS import GPSModule, _distance_m, TARGET_DISTANCE_M
 from badge.hexpansion.Tildagon2024 import Tildagon2024Module
 
@@ -24,6 +31,32 @@ def _sega(name):
 
 def _ttt(name):
     return _BtnEvent(name, "TwentyTwentyFour")
+
+
+def _perform_combo(m, tokens, held=None):
+    # Drive a module through a combo's step tokens, transitioning the held D-pad
+    # so each step lands as an exact input snapshot: release directions the next
+    # step doesn't want, press the ones it does, then press any face button. The
+    # final event of each transition produces the snapshot the matcher checks.
+    held = set() if held is None else held
+    for token in tokens:
+        if token in DIRECTIONS:
+            target_dirs = {token}
+        elif token in DIAGONAL_COMMANDS:
+            target_dirs = set(DIAGONAL_COMMANDS[token])
+        else:
+            target_dirs = held & DIRECTIONS  # button step keeps current directions
+        for direction in list(held & DIRECTIONS):
+            if direction not in target_dirs:
+                held.discard(direction)
+                m.on_button_up(_sega(direction))
+        for direction in target_dirs:
+            if direction not in held:
+                held.add(direction)
+                m.on_button_down(_sega(direction))
+        if token not in DIRECTIONS and token not in DIAGONAL_COMMANDS:
+            held.add(token)
+            m.on_button_down(_sega(token))
 
 
 # ── MegaDrive ─────────────────────────────────────────────────────────────────
@@ -54,8 +87,11 @@ class TestMegaDriveModule(unittest.TestCase):
         for cmd in MegaDriveModule.COMMAND_OPTIONS:
             m = MegaDriveModule()
             m.set_command(cmd)
-            for direction in DIAGONAL_COMMANDS.get(cmd, (cmd,)):
-                m.on_button_down(_sega(direction))
+            if cmd in COMBOS:
+                _perform_combo(m, COMBOS[cmd])
+            else:
+                for direction in DIAGONAL_COMMANDS.get(cmd, (cmd,)):
+                    m.on_button_down(_sega(direction))
             self.assertEqual(m.check_command(), CommandStatus.PASSED, msg=cmd)
 
     def test_unsupported_command_raises(self):
@@ -82,14 +118,13 @@ class TestMegaDriveModule(unittest.TestCase):
         self.m.on_button_down(_sega("left"))
         self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
-    def test_cardinal_requires_only_its_direction_held(self):
-        # Command is "up"; a corner press (up + left held) must NOT pass it.
+    def test_cardinal_latches_as_soon_as_its_direction_is_pressed(self):
+        # Command is "up"; pressing up latches PASSED immediately, even if a
+        # corner press then also holds left.
         self.m.set_command("up")
         self.m.on_button_down(_sega("up"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
         self.m.on_button_down(_sega("left"))
-        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
-        # Releasing the partner leaves only "up" held, which then passes.
-        self.m.on_button_up(_sega("left"))
         self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
 
     def test_set_command_clears_stale_held_buttons(self):
@@ -99,6 +134,75 @@ class TestMegaDriveModule(unittest.TestCase):
         self.m.set_command("up_left")
         self.m.on_button_down(_sega("left"))
         self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+
+# ── MegaDrive combos ──────────────────────────────────────────────────────────
+
+class TestMegaDriveCombos(unittest.TestCase):
+    COMBO = "qcf_a"  # down -> down_right -> right -> A
+
+    def setUp(self):
+        self.m = MegaDriveModule()
+        self.m.set_command(self.COMBO)
+
+    def test_combo_is_advertised_in_capabilities(self):
+        self.assertIn(self.COMBO, self.m.get_capabilities()["commands"])
+
+    def test_combo_decorates_as_glyph_sequence(self):
+        # The motion shows as its glyph sequence with no press verb.
+        self.assertEqual(decorate_command("MegaDrive", self.COMBO), "↓ ↘ → a")
+
+    def test_full_sequence_passes(self):
+        self.m.on_button_down(_sega("down"))         # ↓
+        self.m.on_button_down(_sega("right"))        # ↘ (down+right)
+        self.m.on_button_up(_sega("down"))           # → (right only)
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        self.m.on_button_down(_sega("a"))            # + A
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_partial_sequence_stays_waiting(self):
+        self.m.on_button_down(_sega("down"))
+        self.m.on_button_down(_sega("right"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_pressing_the_button_early_does_not_pass(self):
+        # 'a' before the motion is finished must not complete the combo.
+        self.m.on_button_down(_sega("a"))
+        self.m.on_button_up(_sega("a"))
+        self.m.on_button_down(_sega("down"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_wrong_and_extra_inputs_are_ignored(self):
+        # Advance-only: mashing other buttons mid-motion never resets progress.
+        self.m.on_button_down(_sega("down"))
+        self.m.on_button_down(_sega("b"))            # noise
+        self.m.on_button_up(_sega("b"))
+        self.m.on_button_down(_sega("right"))        # down+right
+        self.m.on_button_up(_sega("down"))           # right
+        self.m.on_button_down(_sega("a"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_overshoot_can_be_retried_within_the_window(self):
+        # Rolling straight from down to right (skipping the corner) doesn't
+        # advance; the player can re-roll to hit down_right and carry on.
+        self.m.on_button_down(_sega("down"))         # ↓  -> step 1
+        self.m.on_button_up(_sega("down"))
+        self.m.on_button_down(_sega("right"))        # → only: step 2 wants ↘, no advance
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        self.m.on_button_down(_sega("down"))         # ↘ (down+right) -> step 2
+        self.m.on_button_up(_sega("down"))           # → -> step 3
+        self.m.on_button_down(_sega("a"))            # + A -> pass
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_slow_step_resets_the_combo(self):
+        clock = {"t": 0}
+        with patch("badge.hexpansion.MegaDrive.time.ticks_ms", side_effect=lambda: clock["t"]):
+            self.m.set_command(self.COMBO)           # latches start time at t=0
+            self.m.on_button_down(_sega("down"))     # step 1 at t=0
+            clock["t"] = COMBO_STEP_MS + 1           # dawdle past the window
+            self.m.on_button_down(_sega("right"))    # too slow -> reset to start
+            self.assertEqual(self.m._combo_progress, 0)
+            self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
 
 # ── GPS pure functions ────────────────────────────────────────────────────────

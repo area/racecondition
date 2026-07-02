@@ -141,6 +141,12 @@ def _public_id_from_secret(secret_id):
     return hashlib.sha256(secret_id.encode()).hexdigest()[:16]
 
 
+# A room is empty between POST /api/rooms/create and its creator's websocket
+# join, and /api/rooms is polled by every index-page viewer — so reaping empty
+# rooms on sight would 404 the creator's join. Only reap once past this grace.
+_EMPTY_ROOM_GRACE_S = 30
+
+
 def _new_room():
     with _rooms_lock:
         room_id = next(i for i in range(1, len(rooms) + 2) if i not in rooms)
@@ -222,12 +228,14 @@ async def admin_status(request):
 async def list_rooms(request):
     with _rooms_lock:
         room_items = list(rooms.items())
+    now = time.monotonic()
     result = []
     empty_ids = []
     for rid, r in room_items:
         snap = r.admin_snapshot()
         if snap["badge_count"] == 0:
-            empty_ids.append(rid)
+            if now - r.created_at > _EMPTY_ROOM_GRACE_S:
+                empty_ids.append(rid)
         else:
             result.append({
                 "room_id": snap["room_id"],

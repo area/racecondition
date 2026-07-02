@@ -107,7 +107,6 @@ class Tildagon2024Module(HexpansionModule):
         return self.last_status
 
     def _check_shake(self):
-        print("[Tildagon] Checking shake command...")
         if self._shake_started_ms is None:
             return CommandStatus.WAITING
         accel = self._read_accel_xyz()
@@ -119,7 +118,6 @@ class Tildagon2024Module(HexpansionModule):
             (accel[1] - self._last_accel[1]) ** 2 +
             (accel[2] - self._last_accel[2]) ** 2
         )
-        print("[Tildagon] Shake delta: {:.2f}".format(delta))
         if delta > 15:  # empirically determined threshold
             print("[Tildagon] Shake command PASSED - delta {:.2f}".format(delta))
             return CommandStatus.PASSED
@@ -150,5 +148,4 @@ class Tildagon2024Module(HexpansionModule):
         return value.lower()
 
     def _read_accel_xyz(self):
-        print("[Tildagon] Reading accelerometer...")
         return imu.acc_read()

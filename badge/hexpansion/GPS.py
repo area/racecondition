@@ -70,7 +70,6 @@ class GPSModule(HexpansionModule):
             self._start_pos[0], self._start_pos[1],
             current[0], current[1],
         )
-        print("[GPS] Distance from start: {:.2f}m".format(dist))
         if dist >= TARGET_DISTANCE_M:
             print("[GPS] PASSED - moved {:.2f}m".format(dist))
             return CommandStatus.PASSED

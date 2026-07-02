@@ -488,6 +488,25 @@ class RoomServerTestCase(unittest.TestCase):
             self.assertIn("room_state", r)
             self.assertGreater(r["badge_count"], 0)
 
+    def test_list_rooms_does_not_reap_freshly_created_room(self):
+        # A room is empty between create and the creator's ws join; a listing
+        # poll in that window must not delete it out from under the creator.
+        data, _ = self.client.create_room()
+        room_id = data["room_id"]
+        self.addCleanup(room_server.rooms.pop, room_id, None)
+        self._get_json("/api/rooms")
+        self.assertIn(room_id, room_server.rooms)
+        state = self._ws(room_id, "badge-grace").join(GPS_CAPS)
+        self.assertNotIn("error", state)
+
+    def test_list_rooms_reaps_empty_room_past_grace(self):
+        data, _ = self.client.create_room()
+        room_id = data["room_id"]
+        self.addCleanup(room_server.rooms.pop, room_id, None)
+        room_server.rooms[room_id].created_at -= room_server._EMPTY_ROOM_GRACE_S + 1
+        self._get_json("/api/rooms")
+        self.assertNotIn(room_id, room_server.rooms)
+
     def test_admin_page_returns_html(self):
         response, status = self._admin_get_json("/admin")
         self.assertEqual(status, 200)

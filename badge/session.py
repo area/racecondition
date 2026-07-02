@@ -215,7 +215,11 @@ class GameSession:
                 self.assignment_timed_out = True
             try:
                 module.set_command(command)
-            except Exception:
+            except Exception as exc:
+                # A module rejecting a server-issued command means the badge and
+                # server disagree about its capabilities — leave a trace, since
+                # the badge otherwise just shows nothing.
+                print("[RC] set_command failed: {} '{}': {}".format(module_name, command, exc))
                 self.clear_assignment()
                 return
         self.set_assignment(module, assignment_id, command)
