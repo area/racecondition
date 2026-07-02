@@ -510,6 +510,15 @@ class RoomServerTestCase(unittest.TestCase):
         self._get_json("/api/rooms")
         self.assertNotIn(room_id, room_server.rooms)
 
+    def test_style_css_served(self):
+        # The pages all <link> the shared theme; a broken route would leave
+        # every page unstyled without failing any HTML test.
+        url = BASE_URL + "/style.css"
+        with urllib.request.urlopen(url) as resp:
+            self.assertEqual(resp.code, 200)
+            self.assertTrue(resp.headers.get("Content-Type", "").startswith("text/css"))
+            self.assertIn(":root", resp.read().decode("utf-8"))
+
     def test_admin_page_returns_html(self):
         response, status = self._admin_get_json("/admin")
         self.assertEqual(status, 200)

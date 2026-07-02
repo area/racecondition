@@ -7,63 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
     <style>
-        :root {
-            --bg:         #0d1c0c;
-            --surface:    #132211;
-            --trace:      #1e3a1a;
-            --silk:       #c8e6b4;
-            --silk-mid:   rgba(200, 230, 180, 0.68);
-            --silk-dim:   rgba(200, 230, 180, 0.38);
-            --copper:     #c8793a;
-            --copper-bg:  rgba(200, 121, 58, 0.1);
-            --led-green:  #22c55e;
-            --led-amber:  #f59e0b;
-        }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            color: var(--silk);
-            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-            background-color: var(--bg);
-            background-image:
-                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px),
-                radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px);
-            background-size: 24px 42px;
-            background-position: 0 0, 12px 21px;
-        }
-        nav {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: rgba(13, 28, 12, 0.96);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border-bottom: 1px solid var(--trace);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 24px;
-            height: 52px;
-        }
-        .nav-brand {
-            font-family: "Space Mono", monospace;
-            font-weight: 700;
-            font-size: 14px;
-            letter-spacing: 0.14em;
-            text-decoration: none;
-            color: var(--copper);
-            text-transform: uppercase;
-        }
-        .nav-back {
-            font-size: 12px;
-            font-family: "IBM Plex Mono", monospace;
-            color: var(--silk-dim);
-            text-decoration: none;
-            transition: color 0.12s;
-        }
-        .nav-back:hover { color: var(--silk-mid); }
-
         .page {
             max-width: 740px;
             margin: 0 auto;
@@ -82,7 +27,6 @@
             line-height: 1.7;
             color: var(--silk-mid);
             margin: 0 0 48px;
-            max-width: 560px;
         }
         h2 {
             font-family: "Space Mono", monospace;

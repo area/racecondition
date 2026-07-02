@@ -1,0 +1,84 @@
+/* Shared "PCB" theme for the Race Condition pages (served at /style.css).
+   Holds the palette and the page chrome (background, nav) used by index,
+   about, hexpansions and admin; everything page-specific stays in that page's
+   own <style> block. The :root palette is the superset across pages — unused
+   variables cost nothing. */
+:root {
+    --bg:         #0d1c0c;
+    --surface:    #132211;
+    --trace:      #1e3a1a;
+    --silk:       #c8e6b4;
+    --silk-mid:   rgba(200, 230, 180, 0.68);
+    --silk-dim:   rgba(200, 230, 180, 0.38);
+    --copper:     #c8793a;
+    --copper-bg:  rgba(200, 121, 58, 0.1);
+    --led-green:  #22c55e;
+    --led-amber:  #f59e0b;
+    --led-blue:   #60a5fa;
+    --led-red:    #ef4444;
+    --ok:         #22c55e;
+    --bad:        #ef4444;
+    --gold:       #f59e0b;
+    --silver:     #94a3b8;
+    --bronze:     #c87941;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    color: var(--silk);
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    background-color: var(--bg);
+    background-image:
+        radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px),
+        radial-gradient(circle, rgba(30, 58, 26, 0.85) 1px, transparent 1px);
+    background-size: 24px 42px;
+    background-position: 0 0, 12px 21px;
+}
+
+/* ── Nav ── */
+nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13, 28, 12, 0.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--trace);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 52px;
+}
+.nav-brand {
+    font-family: "Space Mono", monospace;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-decoration: none;
+    color: var(--copper);
+    text-transform: uppercase;
+}
+/* Right-hand side of the nav: the index uses a link row, the content pages
+   (about, hexpansions) a single "back" link. */
+.nav-links { display: flex; gap: 2px; }
+.nav-links a {
+    text-decoration: none;
+    color: var(--silk-mid);
+    font-size: 12px;
+    font-family: "IBM Plex Mono", monospace;
+    padding: 6px 11px;
+    border-radius: 3px;
+    transition: color 0.12s, background 0.12s;
+}
+.nav-links a:hover { color: var(--silk); background: rgba(200, 230, 180, 0.06); }
+.nav-back {
+    font-size: 12px;
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--silk-dim);
+    text-decoration: none;
+    transition: color 0.12s;
+}
+.nav-back:hover { color: var(--silk-mid); }

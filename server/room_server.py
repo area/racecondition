@@ -113,6 +113,7 @@ INDEX_HTML_PATH = SCRIPT_DIR / "index.html"
 ABOUT_HTML_PATH = SCRIPT_DIR / "about.html"
 HEXPANSIONS_HTML_PATH = SCRIPT_DIR / "hexpansions.html"
 REGISTER_HTML_PATH = SCRIPT_DIR / "register.html"
+STYLE_CSS_PATH = SCRIPT_DIR / "style.css"
 
 
 _html_cache: dict = {}
@@ -200,6 +201,12 @@ async def about_page(request):
 
 async def hexpansions_page(request):
     return _html_response(_load_html(HEXPANSIONS_HTML_PATH, "Hexpansions page"))
+
+
+async def style_css(request):
+    # The shared theme is the one non-HTML asset; it reuses the same
+    # mtime-keyed cache as the pages.
+    return web.Response(text=_load_html(STYLE_CSS_PATH, "Stylesheet"), content_type="text/css")
 
 
 async def leaderboard_redirect(request):
@@ -421,6 +428,7 @@ def build_app():
     app = web.Application()
     app.add_routes([
         web.get("/", index),
+        web.get("/style.css", style_css),
         web.get("/admin", admin_page),
         web.get("/about", about_page),
         web.get("/hexpansions", hexpansions_page),
