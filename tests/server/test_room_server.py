@@ -26,9 +26,12 @@ from aiohttp import web
 
 # server/ is placed on sys.path by tests/server/conftest.py
 import room_server
-import ws_frame
 from room import Room, MAX_BADGES, COLOURS
 from leaderboard import SqliteLeaderboard
+
+# Client-side websocket framing for the test harness below. The server itself
+# uses aiohttp's framing; this helper exists only for these tests.
+from . import ws_frame
 
 # room_client lives in the badge/ subpackage (the other runtime), not on the
 # server path, so load it directly from its file. Only its module-level imports

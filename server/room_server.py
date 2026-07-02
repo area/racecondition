@@ -112,7 +112,6 @@ ADMIN_HTML_PATH = SCRIPT_DIR / "admin.html"
 INDEX_HTML_PATH = SCRIPT_DIR / "index.html"
 ABOUT_HTML_PATH = SCRIPT_DIR / "about.html"
 HEXPANSIONS_HTML_PATH = SCRIPT_DIR / "hexpansions.html"
-LEADERBOARD_HTML_PATH = SCRIPT_DIR / "leaderboard.html"
 REGISTER_HTML_PATH = SCRIPT_DIR / "register.html"
 
 

@@ -1,13 +1,9 @@
 import time
 
+from .buttons import is_cancel
 from .hexpansion.base import CommandStatus
 
 TEST_SKIP_HOLD_MS = 2000
-
-
-def _is_cancel(event):
-    button = getattr(event.button, "parent", None) or event.button
-    return button.name.lower() == "cancel"
 
 
 class TestSession:
@@ -69,7 +65,7 @@ class TestSession:
         if self.state == "summary":
             self.state = "done"
             return
-        if _is_cancel(event):
+        if is_cancel(event):
             if self._cancel_hold_start is None:
                 self._cancel_hold_start = time.ticks_ms()
                 self._cancel_down_event = event
@@ -83,7 +79,7 @@ class TestSession:
                 module.on_button_down(event)
 
     def on_button_up(self, event):
-        if not _is_cancel(event):
+        if not is_cancel(event):
             return
         if (self.state == "command"
                 and self._cancel_hold_start is not None

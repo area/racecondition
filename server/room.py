@@ -104,8 +104,6 @@ class Room:
     def leave(self, badge_id):
         with self._lock:
             self._prune_stale()
-            if self._state == "finished":
-                self._dismissed.add(badge_id)
             if self._badges.pop(badge_id, None) is not None:
                 self._command_pool_cache = None
             self._ready.discard(badge_id)

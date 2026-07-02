@@ -13,6 +13,7 @@ from system.hexpansion.util import read_hexpansion_header, detect_eeprom_addr
 from system.patterndisplay.events import PatternDisable
 from tildagonos import tildagonos
 
+from .buttons import is_cancel
 from .hexpansion_names import get_friendly_name
 from .hexpansion import ModuleRegistry, CommandStatus
 from .room_client import RoomClient
@@ -66,9 +67,7 @@ class RaceConditionApp(app.App):
 			return
 		if self.session.in_game:
 			self._leave_room()
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 		eventbus.remove(HexpansionInsertionEvent, self._on_insert, self)
 		eventbus.remove(HexpansionRemovalEvent, self._on_remove, self)
 		eventbus.remove(ButtonDownEvent, self._on_button_down, self)
@@ -88,10 +87,6 @@ class RaceConditionApp(app.App):
 		self.button_states.clear()
 		self.minimise()
 
-	def _is_cancel(self, event):
-		button = getattr(event.button, "parent", None) or event.button
-		return button.name.lower() == "cancel"
-
 	def _on_button_down(self, event):
 		if self._test_session is not None:
 			self._test_session.on_button_down(event)
@@ -101,7 +96,7 @@ class RaceConditionApp(app.App):
 			self._exit_qr_screen()
 			return
 
-		if self._is_cancel(event):
+		if is_cancel(event):
 			if self.session.in_game and self.session.cancel_hold_start is None:
 				self.session.cancel_hold_start = time.ticks_ms()
 				self._cancel_down_event = event
@@ -119,7 +114,7 @@ class RaceConditionApp(app.App):
 			self._test_session.on_button_up(event)
 			return
 
-		if self._is_cancel(event):
+		if is_cancel(event):
 			if (self.session.cancel_hold_start is not None
 					and self.session.in_round
 					and self.session.expected_module is not None
@@ -136,6 +131,13 @@ class RaceConditionApp(app.App):
 
 	def _main_menu_items(self):
 		return ["Join Room", "Create Room", "Set name", "Test modules", "Quit"]
+
+	def _close_menu(self):
+		# Menu has no public teardown; _cleanup() is the firmware component's
+		# own destructor, so this is the one sanctioned reach into it.
+		if self.menu:
+			self.menu._cleanup()
+			self.menu = None
 
 	def _ensure_menu(self):
 		if not self.menu:
@@ -170,9 +172,7 @@ class RaceConditionApp(app.App):
 		if not self._room_list:
 			self.notification = Notification("No rooms open")
 			return
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 		items = []
 		for room in self._room_list:
 			rid = room["room_id"]
@@ -197,9 +197,7 @@ class RaceConditionApp(app.App):
 			self._back_to_main()
 
 	def _back_to_main(self):
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 
 	def _do_create_room(self):
 		if not self.room_client.available():
@@ -240,9 +238,7 @@ class RaceConditionApp(app.App):
 		return self.module_registry.get_by_name(module_name)
 
 	def _start_room(self, room_id):
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 		self.session.start_room(room_id)
 		self.module_registry.reset_connected()
 		self.net.mark_caps_dirty()
@@ -272,9 +268,7 @@ class RaceConditionApp(app.App):
 		if not modules:
 			self.notification = Notification("No modules connected")
 			return
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 		items = [m.friendly_name() for m in modules] + ["Back"]
 		self.menu = Menu(
 			self,
@@ -288,15 +282,11 @@ class RaceConditionApp(app.App):
 			self._back_to_main()
 			return
 		module = self.module_registry.connected_modules()[idx]
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 		self._test_session = TestSession([module])
 
 	def _show_qr_screen(self):
-		if self.menu:
-			self.menu._cleanup()
-			self.menu = None
+		self._close_menu()
 		self._qr_active = True
 
 	def _exit_qr_screen(self):
