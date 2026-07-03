@@ -26,7 +26,7 @@ pip install -r requirements.txt
 python room_server.py
 ```
 
-It listens on `0.0.0.0:8000` and serves both the HTTP API and the WebSocket endpoint (`/ws/rooms/{id}`). Web pages: `/` (rooms), `/about`, `/hexpansions`, `/admin`, `/leaderboard`.
+It listens on `0.0.0.0:8000` and serves both the HTTP API and the WebSocket endpoint (`/ws/rooms/{id}`). Web pages: `/` (rooms), `/about`, `/hexpansions`, `/admin`.
 
 Environment variables:
 

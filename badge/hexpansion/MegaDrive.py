@@ -28,8 +28,9 @@ DIRECTIONS = frozenset(("up", "down", "left", "right"))
 
 # A diagonal is satisfied only while both of its directions are held at once,
 # which is exactly what a real D-pad does when you push into a corner. A cardinal
-# (or plain button) is satisfied as soon as its button is in the held set, so a
-# corner press latches the matching cardinal the moment that direction goes down.
+# is satisfied only while exactly its one direction is held — a corner, with an
+# adjacent direction also down, does not count — and a plain button just needs to
+# be in the held set.
 DIAGONAL_COMMANDS = {
     "up_left": frozenset(("up", "left")),
     "up_right": frozenset(("up", "right")),
@@ -85,7 +86,9 @@ class MegaDriveModule(HexpansionModule):
         arrow_name = BUTTON_ARROW_NAMES.get(token)
         if arrow_name:
             return symbols["arrows"][arrow_name]
-        return token
+        # Face/Start buttons have no glyph; show them uppercase (A, B, START) to
+        # match the printed controller and the /hexpansions catalog.
+        return token.upper()
 
     def __init__(self):
         super().__init__()
@@ -129,7 +132,11 @@ class MegaDriveModule(HexpansionModule):
     def _evaluate_command(self):
         # Judge the current command against the buttons held right now, on every
         # press and release rather than polling each frame in check_command. Once
-        # PASSED it stays PASSED — a release can't un-latch it.
+        # PASSED it stays PASSED — a release can't un-latch it, and a later button
+        # event can't re-enter matching (which for a completed combo would index
+        # past the last step).
+        if self.last_status == CommandStatus.PASSED:
+            return
         steps = COMBOS.get(self.current_command)
         if steps is not None:
             self._advance_combo(steps)
@@ -155,22 +162,23 @@ class MegaDriveModule(HexpansionModule):
                 self.last_status = CommandStatus.PASSED
 
     def _step_matches(self, token):
-        # A combo's bare-direction step must be the EXACT set of D-pad directions
-        # held — "right" requires "down" to have been released first — so a
-        # "down -> down_right -> right" roll advances one step at a time. Diagonals
-        # and buttons match the same way inside a combo as on their own.
-        if token in DIRECTIONS:
-            return (self._held & DIRECTIONS) == frozenset((token,))
+        # A combo step matches exactly like the same token as a standalone
+        # command, so this just delegates. A bare-direction step therefore needs
+        # that direction and no other held ("right" requires "down" to have been
+        # released first), which is what advances a "down -> down_right -> right"
+        # roll one step at a time.
         return self._matches(token)
 
     def _matches(self, token):
-        # Shared by single commands and a combo's non-bare-direction steps: a
-        # diagonal needs both its directions held; a cardinal or face button just
-        # needs to be present in the held set, so a single-command cardinal latches
-        # as soon as it's pressed, even mid-corner.
+        # Shared by single commands and combo steps. A diagonal needs exactly its
+        # two directions held; a cardinal needs exactly its one direction, so a
+        # corner press (with an adjacent direction also held) does NOT satisfy it;
+        # a face button just needs to be present in the held set.
         diagonal = DIAGONAL_COMMANDS.get(token)
         if diagonal is not None:
             return (self._held & DIRECTIONS) == diagonal
+        if token in DIRECTIONS:
+            return (self._held & DIRECTIONS) == frozenset((token,))
         return token in self._held
 
     def _get_button_name(self, event):

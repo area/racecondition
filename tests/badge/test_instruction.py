@@ -16,12 +16,13 @@ from app_components import symbols
 
 class TestDecorateCommand(unittest.TestCase):
     def test_megadrive_button_gets_press_verb(self):
-        # "a" -> "<verb> a" with a verb from the module's pool.
+        # "a" -> "<verb> A" with a verb from the module's pool; face buttons
+        # display uppercase to match the printed controller.
         for _ in range(20):
             phrase = decorate_command("MegaDrive", "a")
             verb, _, command = phrase.partition(" ")
             self.assertIn(verb, MEGADRIVE_VERBS)
-            self.assertEqual(command, "a")
+            self.assertEqual(command, "A")
 
     def test_megadrive_dpad_shown_as_arrow_glyph(self):
         # D-pad directions display the matching arrow, not the word.
@@ -63,7 +64,7 @@ class TestDisplayInstruction(unittest.TestCase):
         self.s.set_display({"id": "a-1", "module": "MegaDrive", "command": "a", "target_colour": None})
         # Raw command preserved; display_instruction carries the decorated form.
         self.assertEqual(self.s.display_command, "a")
-        self.assertTrue(self.s.display_instruction.endswith(" a"))
+        self.assertTrue(self.s.display_instruction.endswith(" A"))
 
     def test_verb_is_stable_while_assignment_id_unchanged(self):
         # A full-state re-push of the same assignment must not re-roll the verb
@@ -80,7 +81,7 @@ class TestDisplayInstruction(unittest.TestCase):
         seen = set()
         for i in range(40):
             self.s.set_display({"id": "a-{}".format(i), "module": "MegaDrive", "command": "a", "target_colour": None})
-            self.assertTrue(self.s.display_instruction.endswith(" a"))
+            self.assertTrue(self.s.display_instruction.endswith(" A"))
             seen.add(self.s.display_instruction)
         self.assertGreater(len(seen), 1)
 
@@ -88,7 +89,7 @@ class TestDisplayInstruction(unittest.TestCase):
         # Fallback path: no id supplied, so a changed command re-rolls.
         self.s.set_display({"module": "MegaDrive", "command": "a", "target_colour": None})
         self.s.set_display({"module": "MegaDrive", "command": "b", "target_colour": None})
-        self.assertTrue(self.s.display_instruction.endswith(" b"))
+        self.assertTrue(self.s.display_instruction.endswith(" B"))
 
     def test_clear_display_resets_instruction(self):
         self.s.set_display({"id": "a-1", "module": "MegaDrive", "command": "a", "target_colour": None})

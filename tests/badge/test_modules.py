@@ -150,7 +150,7 @@ class TestMegaDriveCombos(unittest.TestCase):
 
     def test_combo_decorates_as_glyph_sequence(self):
         # The motion shows as its glyph sequence with no press verb.
-        self.assertEqual(decorate_command("MegaDrive", self.COMBO), "↓ ↘ → a")
+        self.assertEqual(decorate_command("MegaDrive", self.COMBO), "↓ ↘ → A")
 
     def test_full_sequence_passes(self):
         self.m.on_button_down(_sega("down"))         # ↓

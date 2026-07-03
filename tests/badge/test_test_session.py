@@ -110,6 +110,10 @@ class TestTestSessionProgression(unittest.TestCase):
         self.ts.on_button_down(_btn("a"))
         self.m.on_button_down.assert_called_once()
 
+    def test_button_up_routed_to_current_module(self):
+        self.ts.on_button_up(_btn("a"))
+        self.m.on_button_up.assert_called_once()
+
     def test_current_module_is_none_in_summary(self):
         self.m.check_command.return_value = CommandStatus.PASSED
         for _ in range(3):
@@ -226,6 +230,12 @@ class TestTestSessionDynamicQueue(unittest.TestCase):
         ts = TestSession([m])
         ts.on_button_down(_btn("x", group="SegaController"))
         m.on_button_down.assert_called_once()
+
+    def test_waiting_forwards_button_up_to_modules(self):
+        m = _make_module("MegaDrive", [])
+        ts = TestSession([m])
+        ts.on_button_up(_btn("x", group="SegaController"))
+        m.on_button_up.assert_called_once()
 
     def test_waiting_hold_cancel_finishes_to_summary(self):
         m = _make_module("MegaDrive", [])

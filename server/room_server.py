@@ -209,10 +209,6 @@ async def style_css(request):
     return web.Response(text=_load_html(STYLE_CSS_PATH, "Stylesheet"), content_type="text/css")
 
 
-async def leaderboard_redirect(request):
-    raise web.HTTPFound("/#leaderboard")
-
-
 async def register_page(request):
     return _html_response(_load_html(REGISTER_HTML_PATH, "Register page"))
 
@@ -360,7 +356,14 @@ async def ws_handler(request):
                 # Idle: once joined, push a delta so the badge sees any change.
                 if joined:
                     state = room.poll(badge_id, None, result=None)
-                    await send_state(state)
+                    # A joined badge can be stale-pruned mid-connection (an event
+                    # loop stall longer than STALE_BADGE_SECONDS between polls); if
+                    # the room has since filled, poll returns a capacity error.
+                    # Don't forward it — that would eject a badge from a game it's
+                    # actively playing. Stay quiet; a later poll re-adds it once
+                    # there's room.
+                    if "error" not in state:
+                        await send_state(state)
                 continue
 
             if msg.type != WSMsgType.TEXT:
@@ -432,7 +435,6 @@ def build_app():
         web.get("/admin", admin_page),
         web.get("/about", about_page),
         web.get("/hexpansions", hexpansions_page),
-        web.get("/leaderboard", leaderboard_redirect),
         web.get("/api/admin/status", admin_status),
         web.get("/api/rooms", list_rooms),
         web.get("/api/leaderboard", api_leaderboard),

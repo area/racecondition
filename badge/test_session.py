@@ -80,6 +80,14 @@ class TestSession:
 
     def on_button_up(self, event):
         if not is_cancel(event):
+            # Mirror on_button_down: modules track held buttons (e.g. the
+            # MegaDrive's diagonals and combo rolls advance on releases), so
+            # releases must reach them too.
+            if self.state == "command":
+                self._items[self._index][0].on_button_up(event)
+            elif self.state == "waiting":
+                for module in self._modules:
+                    module.on_button_up(event)
             return
         if (self.state == "command"
                 and self._cancel_hold_start is not None
