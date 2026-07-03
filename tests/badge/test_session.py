@@ -192,6 +192,16 @@ class TestSetDisplay(unittest.TestCase):
         self.s.set_display({"module": "MegaDrive", "command": "start", "target_colour": None})
         self.assertEqual(self.s.display_module_name, "MegaDrive")
 
+    def test_changed_ms_moves_only_on_a_new_assignment(self):
+        # display_changed_ms drives the slam-in animation, so a re-push of the
+        # same assignment (every poll) must not retrigger it.
+        self.s.set_display({"id": 7, "module": "GPS", "command": "move", "target_colour": None}, now_ms=100)
+        self.assertEqual(self.s.display_changed_ms, 100)
+        self.s.set_display({"id": 7, "module": "GPS", "command": "move", "target_colour": None}, now_ms=200)
+        self.assertEqual(self.s.display_changed_ms, 100)
+        self.s.set_display({"id": 8, "module": "GPS", "command": "shake", "target_colour": None}, now_ms=300)
+        self.assertEqual(self.s.display_changed_ms, 300)
+
 
 class TestApplyPollResponse(unittest.TestCase):
     def setUp(self):

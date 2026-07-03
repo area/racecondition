@@ -381,9 +381,11 @@ class RaceConditionApp(app.App):
 							self.leds.flash(FLASH_GREEN, time.ticks_ms(), fill_up_frame)
 						else:
 							self.leds.flash(FLASH_RED, time.ticks_ms(), fill_frame)
+						self.renderer.flash_result(status == CommandStatus.PASSED, time.ticks_ms())
 				if self.session.assignment_timed_out:
 					self.session.assignment_timed_out = False
 					self.leds.flash(FLASH_RED, time.ticks_ms(), fill_frame)
+					self.renderer.flash_result(False, time.ticks_ms())
 
 		elif not self._qr_active:
 			self._ensure_menu()

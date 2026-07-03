@@ -6,10 +6,36 @@ from app_components import clear_background
 from .constants import BADGE_COLOURS
 
 
+# The instruction ring sits inside the cancel-hold ring (radius 116, width 5)
+# so the two stay readable when both are on screen.
+RING_RADIUS = 105
+RING_WIDTH = 10
+RING_YELLOW_FRACTION = 2 / 3  # ring: green above this, yellow below
+RING_RED_FRACTION = 1 / 3     # ring: red and blinking below this
+
+# The scheduler renders at most 20fps (one frame per update tick, 50ms
+# minimum), and the websocket + I2C polling share that loop, so effective
+# frame rate is lower and uneven. Continuous tweens judder at that rate;
+# every effect here is therefore a discrete state change, which stays crisp
+# however few frames it gets.
+SPLASH_MAX_MS = 2000  # result screen safety cap if no new instruction arrives
+ROUND_PANIC_S = 10  # final round seconds: once-a-second beat
+BEAT_MS = 250     # how much of each panic second the beat state is on
+
+# The target-colour banner: a full-brightness chord segment across the top
+# of the screen, sitting inside the ring (radius < ring inner edge 100).
+# Full saturation keeps purple/blue distinguishable where a dim wash
+# muddied them, and the instruction text below stays on black.
+BANNER_RADIUS = 95
+BANNER_CHORD_Y = -44  # banner's bottom edge; module name starts at -42
+BANNER_TEXT_Y = -70
+
+
 class Renderer:
 	def __init__(self, app):
 		self.app = app
 		self._qr_matrix = None
+		self._splash = None  # (passed, start_ms) while the result flash runs
 
 	def draw(self, ctx):
 		app = self.app
@@ -75,6 +101,91 @@ class Renderer:
 		ctx.rgb(0.95, 0.55, 0)
 		start = -math.pi / 2
 		ctx.arc(0, 0, 116, start, start + 2 * math.pi * frac, False)
+		ctx.stroke()
+		ctx.restore()
+
+	def flash_result(self, passed, now_ms):
+		# Landing the pass/fail where the player is actually looking: the LED
+		# comet plays on the ring, this plays on the screen.
+		self._splash = (passed, now_ms)
+
+	def _draw_result_splash(self, ctx):
+		if self._splash is None:
+			return
+		passed, start = self._splash
+		# The result screen holds until the next instruction arrives, so
+		# there's never a gap showing a stale instruction. The safety cap
+		# stops a quiet server from hiding the round forever; a cleared
+		# display (left room / round reset) also drops it.
+		changed = self.app.session.display_changed_ms
+		if (
+			changed is None
+			or time.ticks_diff(changed, start) > 0
+			or time.ticks_diff(time.ticks_ms(), start) >= SPLASH_MAX_MS
+		):
+			self._splash = None
+			return
+		if passed:
+			bg, fg, word = (0, 0.30, 0), (0.5, 1, 0.5), "NICE!"
+		else:
+			bg, fg, word = (0.35, 0, 0), (1, 0.45, 0.45), "MISS!"
+		ctx.save()
+		ctx.rgb(*bg)
+		ctx.rectangle(-120, -120, 240, 240).fill()
+		ctx.rgb(*fg)
+		ctx.font_size = 42
+		ctx.move_to(0, 0).text(word)
+		ctx.restore()
+
+	def _draw_target_banner(self, ctx, colour_word):
+		# Chord segment across the top in the target's full-brightness
+		# colour, with the colour word knocked out of it in black or white
+		# (whichever contrasts with that colour).
+		rgb = self._target_rgb()
+		ctx.save()
+		ctx.rgb(*rgb)
+		a = math.asin(BANNER_CHORD_Y / BANNER_RADIUS)
+		ctx.arc(0, 0, BANNER_RADIUS, math.pi - a, 2 * math.pi + a, False)
+		ctx.fill()
+		luma = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+		if luma > 0.5:
+			ctx.rgb(0, 0, 0)
+		else:
+			ctx.rgb(1, 1, 1)
+		ctx.font_size = 22
+		ctx.move_to(0, BANNER_TEXT_Y).text(colour_word)
+		ctx.restore()
+
+	def _target_rgb(self):
+		# Screen colour for the current instruction's target badge, normalised
+		# so the brightest channel hits 1.0 — keeps the hue but reads at full
+		# brightness on the dark background. Green fallback matches the app's
+		# default text colour.
+		colour = (self.app.session.display_target_colour or "").lower()
+		rgb = BADGE_COLOURS.get(colour)
+		if not rgb:
+			return (0, 1, 0)
+		peak = max(rgb)
+		return (rgb[0] / peak, rgb[1] / peak, rgb[2] / peak)
+
+	def _draw_instruction_ring(self, ctx, frac):
+		# Purely the instruction timer — the background wash carries the
+		# target colour. Traffic-light coded by remaining thirds: green,
+		# yellow, then red and blinking. No dim trace behind it — a second
+		# full-circle stroke measured ~8ms/frame on hardware.
+		if frac <= 0:
+			return
+		ctx.save()
+		ctx.line_width = RING_WIDTH
+		if frac > RING_YELLOW_FRACTION:
+			ctx.rgb(0, 1, 0)
+		elif frac > RING_RED_FRACTION:
+			ctx.rgb(0.9, 0.9, 0)
+		else:
+			bright = 1.0 if (time.ticks_ms() // 250) % 2 else 0.3
+			ctx.rgb(bright, 0, 0)
+		start = -math.pi / 2
+		ctx.arc(0, 0, RING_RADIUS, start, start + 2 * math.pi * frac, False)
 		ctx.stroke()
 		ctx.restore()
 
@@ -151,41 +262,44 @@ class Renderer:
 	def _draw_in_round(self, ctx):
 		app = self.app
 		session = app.session
-		ctx.rgb(0.4, 0.4, 0.4)
-		ctx.font_size = 10
-		ctx.move_to(0, -68).text("Room {}  Badge {}".format(session.room_id, app.badge_id[-6:]))
-		ctx.rgb(0, 1, 0)
+		now = time.ticks_ms()
+		secs = session.remaining_seconds(now)
+
+		# Final seconds of the round: a once-a-second beat — background flash
+		# plus a bigger countdown, drawn below. The banner draws over it.
+		beat = secs is not None and 0 < secs <= ROUND_PANIC_S and (now % 1000) < BEAT_MS
+		if beat:
+			ctx.rgb(0.30, 0, 0)
+			ctx.rectangle(-120, -120, 240, 240).fill()
+
+		# No room/badge header in-round: ctx text costs ~0.9ms per character
+		# (size-independent), and that 20-char line of lobby info was ~18ms of
+		# a 50ms frame budget.
 		if session.display_target_colour:
-			ctx.font_size = 14
-			ctx.move_to(0, -50).text(session.display_target_colour)
+			self._draw_target_banner(ctx, session.display_target_colour)
+
+		frac = self._instruction_fraction()
+
+		ctx.rgb(0, 1, 0)
 		ctx.font_size = 24
 		ctx.move_to(0, -30).text(session.display_module_name or "")
 		ctx.move_to(0, -4).text(session.display_instruction or "...")
-		frac = self._instruction_fraction()
+
 		if frac is not None:
-			ctx.rgb(0.2, 0.2, 0.2)
-			ctx.rectangle(-100, 10, 200, 5).fill()
-			if frac > 0.5:
-				ctx.rgb(0, 0.8, 0)
-			elif frac > 0.25:
-				ctx.rgb(0.8, 0.6, 0)
-			else:
-				ctx.rgb(0.8, 0.1, 0)
-			ctx.rectangle(-100, 10, 200 * frac, 5).fill()
-		now = time.ticks_ms()
-		secs = session.remaining_seconds(now)
+			self._draw_instruction_ring(ctx, frac)
+
+		# No modules footer in-round either — same reasoning as the header:
+		# ~25 characters of lobby info for ~18ms a frame.
 		if secs is None or secs > 30:
 			ctx.rgb(0, 1, 0)
-		elif secs > 10:
+		elif secs > ROUND_PANIC_S:
 			ctx.rgb(0.95, 0.55, 0)
 		else:
 			ctx.rgb(1, 0, 0)
-		ctx.font_size = 30
+		ctx.font_size = 38 if beat else 30
 		ctx.move_to(0, 52).text(session.format_remaining(now))
-		ctx.font_size = 10
-		ctx.rgb(0.5, 0.5, 0.5)
-		modules = ", ".join(m.friendly_name() for m in app.module_registry.connected_modules())
-		ctx.move_to(0, 72).text(modules or "No modules")
+
+		self._draw_result_splash(ctx)
 
 	def _draw_testing_command(self, ctx):
 		ts = self.app._test_session

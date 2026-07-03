@@ -20,6 +20,7 @@ class GameSession:
         self.display_time_remaining_s = None
         self.display_timeout_s = None
         self.display_updated_ms = None
+        self.display_changed_ms = None
         self.pending_result = None
         self.assignment_timed_out = False
         self.badge_colour = None
@@ -65,6 +66,7 @@ class GameSession:
         self.display_time_remaining_s = None
         self.display_timeout_s = None
         self.display_updated_ms = None
+        self.display_changed_ms = None
 
     def start_room(self, room_id):
         self.room_id = room_id
@@ -129,6 +131,10 @@ class GameSession:
             changed = module != self.display_module_name or command != self.display_command
         if changed:
             self.display_instruction = decorate_command(module, command)
+            # Unlike display_updated_ms (refreshed on every poll), this only
+            # moves on a genuinely new instruction — the renderer holds the
+            # pass/fail result screen up until it advances.
+            self.display_changed_ms = now_ms
         self.display_assignment_id = assignment_id
         self.display_module_name = module
         self.display_command = command

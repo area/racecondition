@@ -5,6 +5,7 @@ import time
 from app_components import Notification
 
 
+
 class _CapabilitiesSync:
 	def __init__(self):
 		self._dirty = True
