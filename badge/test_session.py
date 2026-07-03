@@ -16,6 +16,7 @@ class TestSession:
         self._index = 0
         self._passed = 0
         self._skipped = 0
+        self._current_instruction = None
         self._cancel_hold_start = None
         self._cancel_down_event = None
         self._discover()
@@ -36,6 +37,10 @@ class TestSession:
     @property
     def current_command(self):
         return self._items[self._index][1] if self.state == "command" else None
+
+    @property
+    def current_instruction(self):
+        return self._current_instruction if self.state == "command" else None
 
     @property
     def total(self):
@@ -146,6 +151,10 @@ class TestSession:
     def _start_current(self):
         module, command = self._items[self._index]
         module.set_command(command)
+        # Decorate once per command, matching how in-round instructions are
+        # built (session.py): decorate() picks a random verb, so calling it
+        # from the draw loop would change the phrase every frame.
+        self._current_instruction = module.decorate(command)
 
     def _advance(self):
         self._index += 1

@@ -1,11 +1,9 @@
 import time
 
-from .base import HexpansionModule, CommandStatus, random_verb
+from .base import HexpansionModule, CommandStatus
+from .verbs import PRESS_VERBS, random_verb
 
 from app_components import symbols
-
-
-PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
 
 
 # The D-pad directions show the matching arrow glyph so players orient to the
@@ -45,7 +43,8 @@ SIX_BUTTON_ONLY = {"x", "y", "z", #"mode"
 COMBOS = {
     # Quarter-circle-forward + A ("Hadouken").
     "qcf_a": ["down", "down_right", "right", "a"],
-    "qcb_b": ["down", "down_left", "left", "b"]
+    "qcb_b": ["down", "down_left", "left", "b"],
+    "dragon_punch": ["right", "down", "down_right", "c"]
 }
 
 # Each step must follow the previous one within this window, else the combo

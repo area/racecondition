@@ -194,7 +194,7 @@ class Renderer:
 		ctx.move_to(0, -68).text("Testing {}/{}".format(ts.index + 1, ts.total))
 		ctx.font_size = 24
 		ctx.move_to(0, -30).text(ts.current_module.friendly_name())
-		ctx.move_to(0, -4).text(ts.current_command)
+		ctx.move_to(0, -4).text(ts.current_instruction or ts.current_command)
 		self._draw_cancel_hint(ctx, "skip")
 
 	def _draw_testing_waiting(self, ctx):

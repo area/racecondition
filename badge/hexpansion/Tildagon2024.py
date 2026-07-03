@@ -1,14 +1,12 @@
 import math
 import time
 
-from .base import HexpansionModule, CommandStatus, random_verb
+from .base import HexpansionModule, CommandStatus
+from .verbs import PRESS_VERBS, random_verb
 
 import imu
 
 from app_components import symbols
-
-
-PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
 
 # Gesture commands read as a whole phrase, not "<verb> shake".
 GESTURE_PHRASES = {

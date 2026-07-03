@@ -1,5 +1,3 @@
-import random
-
 from ..hexpansion_names import get_friendly_name
 
 
@@ -7,12 +5,6 @@ class CommandStatus:
     PASSED = "passed"
     FAILED = "failed"
     WAITING = "waiting"
-
-
-def random_verb(verbs):
-    # getrandbits is the one PRNG primitive guaranteed on the badge's
-    # MicroPython build (see lib/aiohttp_ws.py); random.choice may be absent.
-    return verbs[random.getrandbits(16) % len(verbs)]
 
 
 class HexpansionModule:
