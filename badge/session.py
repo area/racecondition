@@ -30,6 +30,8 @@ class GameSession:
         self.server_scores = {"passed": 0, "failed": 0}
         self.badge_scores = {}
         self.overall_score = None
+        self.rank = None
+        self.total_games = None
         self.ready_count = 0
         self.is_ready = False
         self.dismissed_count = 0
@@ -103,6 +105,8 @@ class GameSession:
             self.pending_result = None
             self.assignment_timed_out = False
             self.badge_scores = {}
+            self.rank = None
+            self.total_games = None
             self.ready_count = 0
             self.is_ready = False
             self.dismissed_count = 0
@@ -179,6 +183,10 @@ class GameSession:
             self.badge_scores = data["badge_scores"]
         if data.get("overall_score") is not None:
             self.overall_score = data["overall_score"]
+        if data.get("rank") is not None:
+            self.rank = data["rank"]
+        if data.get("total_games") is not None:
+            self.total_games = data["total_games"]
         if data.get("ready_count") is not None:
             self.ready_count = data["ready_count"]
         if data.get("is_ready") is not None:

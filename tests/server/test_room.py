@@ -13,6 +13,54 @@ def _room(room_id=1):
     return Room(room_id, leaderboard=SqliteLeaderboard(":memory:"))
 
 
+class TestReadyToggle(unittest.TestCase):
+    def setUp(self):
+        self.room = _room(1)
+        self.room.join("badge-a", {})
+        self.room.join("badge-b", {})
+
+    def _players(self, badge_id):
+        return {p["colour"]: p for p in self.room.poll(badge_id, None)["players"]}
+
+    def test_unready_removes_readiness(self):
+        self.room.start_round("badge-a")  # only one of two: stays waiting
+        data = self.room.unready("badge-a")
+        self.assertEqual(data["ready_count"], 0)
+        self.assertEqual(data["room_state"], "waiting")
+
+    def test_ready_changes_reach_players_payload(self):
+        self.room.start_round("badge-a")
+        colour_a = self.room.poll("badge-a", None)["colour"]
+        players = self._players("badge-b")
+        self.assertTrue(players[colour_a]["ready"])
+        self.room.unready("badge-a")
+        players = self._players("badge-b")
+        self.assertFalse(players[colour_a]["ready"])
+
+    def test_unready_when_in_round_is_an_error(self):
+        self.room.start_round("badge-a")
+        self.room.start_round("badge-b")  # all ready: round starts
+        data = self.room.unready("badge-a")
+        self.assertIn("error", data)
+
+    def test_unready_when_not_ready_is_a_noop(self):
+        data = self.room.unready("badge-a")
+        self.assertEqual(data["ready_count"], 0)
+
+    def test_undismiss_holds_the_score_screen_open(self):
+        self.room.start_round("badge-a")
+        self.room.start_round("badge-b")
+        self.room._round_started_at -= ROUND_DURATION_S  # expire the round
+        self.room.poll("badge-a", None)
+        self.room.dismiss_score("badge-a")
+        self.room.undismiss_score("badge-a")
+        # badge-b dismissing alone must not return the room to waiting.
+        data = self.room.dismiss_score("badge-b")
+        self.assertEqual(data["room_state"], "finished")
+        data = self.room.dismiss_score("badge-a")
+        self.assertEqual(data["room_state"], "waiting")
+
+
 class TestJoin(unittest.TestCase):
     def setUp(self):
         self.room = _room(1)

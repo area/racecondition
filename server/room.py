@@ -126,11 +126,27 @@ class Room:
                 return {"room_id": self.room_id, "error": "Round already in progress"}
             if badge_id not in self._badges:
                 return {"room_id": self.room_id, "error": "Badge not in room"}
-            self._ready.add(badge_id)
+            if badge_id not in self._ready:
+                self._ready.add(badge_id)
+                # Readiness is part of the players payload, which is only
+                # re-sent when the generation moves.
+                self._players_generation += 1
             if not (set(self._badges.keys()) - self._ready):
                 self._start_round_locked()
                 return {"room_id": self.room_id, "status": "started", "room_state": "in-round"}
         return {"room_id": self.room_id, "status": "ready", "room_state": "waiting", "ready_count": len(self._ready)}
+
+    def unready(self, badge_id):
+        with self._lock:
+            self._prune_stale()
+            if self._state != "waiting":
+                return {"room_id": self.room_id, "error": "Round already in progress"}
+            if badge_id not in self._badges:
+                return {"room_id": self.room_id, "error": "Badge not in room"}
+            if badge_id in self._ready:
+                self._ready.discard(badge_id)
+                self._players_generation += 1
+            return {"room_id": self.room_id, "status": "unready", "room_state": "waiting", "ready_count": len(self._ready)}
 
     def set_timer(self, seconds):
         with self._lock:
@@ -144,6 +160,12 @@ class Room:
             if self._state == "finished":
                 self._dismissed.add(badge_id)
                 self._check_all_dismissed()
+            return {"room_id": self.room_id, "status": "ok", "room_state": self._state}
+
+    def undismiss_score(self, badge_id):
+        with self._lock:
+            if self._state == "finished":
+                self._dismissed.discard(badge_id)
             return {"room_id": self.room_id, "status": "ok", "room_state": self._state}
 
     def admin_snapshot(self):
@@ -194,6 +216,7 @@ class Room:
         self._ready = set()
         self._players_generation = 0
         self._command_pool_cache = None
+        self._round_rank = None  # (rank, total_games) once a round is recorded
 
     def _now(self):
         return time.monotonic()
@@ -204,6 +227,10 @@ class Room:
         self._scores = {"passed": 0, "failed": 0}
         self._module_scores = {}
         self._ready = set()
+        self._round_rank = None
+        # Ready flags travel in the players payload; clearing them must
+        # trigger a re-send.
+        self._players_generation += 1
         for slot in self._badges.values():
             slot.score = {"passed": 0, "failed": 0}
             slot.assignment = None
@@ -405,6 +432,7 @@ class Room:
         }
         try:
             self._leaderboard.record(entry)
+            self._round_rank = self._leaderboard.rank_of_score(entry["score"])
         except Exception as exc:
             print("[Room] Leaderboard write failed: {}".format(exc))
 
@@ -433,7 +461,11 @@ class Room:
         if slot is not None and slot.last_sent_gen != current_gen:
             slot.last_sent_gen = current_gen
             players = [
-                {"colour": s.colour, "username": self._username(bid) or s.colour}
+                {
+                    "colour": s.colour,
+                    "username": self._username(bid) or s.colour,
+                    "ready": bid in self._ready,
+                }
                 for bid, s in self._badges.items()
             ]
         else:
@@ -454,6 +486,8 @@ class Room:
             "dismissed_count": len(self._dismissed) if self._state == "finished" else None,
             "is_dismissed": (badge_id in self._dismissed) if self._state == "finished" else None,
             "overall_score": self._calculate_score() if self._state == "finished" else None,
+            "rank": self._round_rank[0] if self._state == "finished" and self._round_rank else None,
+            "total_games": self._round_rank[1] if self._state == "finished" and self._round_rank else None,
             "players": players,
             "need_capabilities": not has_caps,
         }

@@ -41,6 +41,34 @@ def _make_lb():
     return SqliteLeaderboard(path), path
 
 
+class TestRankOfScore(unittest.TestCase):
+    def setUp(self):
+        self.lb, self.path = _make_lb()
+
+    def tearDown(self):
+        os.unlink(self.path)
+
+    def _record(self, score, timestamp):
+        entry = dict(_ENTRY_A, score=score, timestamp=timestamp)
+        self.lb.record(entry)
+
+    def _now_iso(self, hours_ago=0):
+        from datetime import datetime, timedelta, timezone
+        return (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat()
+
+    def test_rank_counts_only_strictly_better_games(self):
+        self._record(80.0, self._now_iso(1))
+        self._record(50.0, self._now_iso(2))
+        self._record(50.0, self._now_iso(3))
+        self.assertEqual(self.lb.rank_of_score(50.0), (2, 3))
+        self.assertEqual(self.lb.rank_of_score(80.0), (1, 3))
+
+    def test_rank_ignores_games_older_than_24h(self):
+        self._record(999.0, self._now_iso(30))  # yesterday's high score
+        self._record(50.0, self._now_iso(1))
+        self.assertEqual(self.lb.rank_of_score(50.0), (1, 1))
+
+
 class TestSqliteLeaderboardStats(unittest.TestCase):
     def setUp(self):
         self.lb, self.path = _make_lb()

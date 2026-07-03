@@ -95,21 +95,23 @@ def make_renderer(target_colour):
     return Renderer(FakeApp(target_colour))
 
 
-def test_target_rgb_normalises_brightest_channel_to_full():
-    assert make_renderer("Blue")._target_rgb() == (0.0, 0.0, 1.0)
-    r, g, b = make_renderer("Orange")._target_rgb()
-    assert r == 1.0 and 0 < g < 1 and b == 0.0
+def test_colour_rgb_normalises_brightest_channel_to_full():
+    r = make_renderer(None)
+    assert r._colour_rgb("Blue") == (0.0, 0.0, 1.0)
+    red, green, blue = r._colour_rgb("Orange")
+    assert red == 1.0 and 0 < green < 1 and blue == 0.0
 
 
-def test_target_rgb_handles_capitalised_session_value():
+def test_colour_rgb_handles_capitalised_session_value():
     # session.set_display capitalises the colour ("blue" -> "Blue"); the
     # palette lookup must still resolve it.
-    assert make_renderer("White")._target_rgb() == (1.0, 1.0, 1.0)
+    assert make_renderer(None)._colour_rgb("White") == (1.0, 1.0, 1.0)
 
 
-def test_target_rgb_falls_back_to_green():
-    assert make_renderer(None)._target_rgb() == (0, 1, 0)
-    assert make_renderer("Mauve")._target_rgb() == (0, 1, 0)
+def test_colour_rgb_falls_back_to_green():
+    r = make_renderer(None)
+    assert r._colour_rgb(None) == (0, 1, 0)
+    assert r._colour_rgb("Mauve") == (0, 1, 0)
 
 
 def test_ring_draws_single_traffic_light_sweep():
@@ -258,6 +260,126 @@ def test_fail_splash_says_miss():
 
     ctx = draw_in_round(renderer_setup=splash_now)
     assert find_text(ctx, "MISS!")
+
+
+class FakeNet:
+    joined = True
+
+
+class FakeWaitingSession:
+    def __init__(self):
+        self.room_id = 2
+        self.badge_colour = "blue"
+        self.players = [
+            {"colour": "blue", "username": "alex", "ready": True},
+            {"colour": "orange", "username": "orange", "ready": False},
+        ]
+        self.ready_count = 1
+        self.is_ready = True
+        self.badge_count = 2
+
+
+class FakeWaitingApp:
+    def __init__(self):
+        self.session = FakeWaitingSession()
+        self.net = FakeNet()
+
+
+def draw_waiting(mutate=None):
+    ctx = FakeCtx()
+    app = FakeWaitingApp()
+    if mutate:
+        mutate(app)
+    Renderer(app)._draw_waiting(ctx)
+    return ctx
+
+
+def test_waiting_banner_teaches_own_colour():
+    from badge.render import WAIT_BANNER_RADIUS
+
+    ctx = draw_waiting()
+    banner = ctx.fills[0]
+    assert banner["arc"]["radius"] == WAIT_BANNER_RADIUS
+    assert banner["rgb"] == (0.0, 0.0, 1.0)
+    assert find_text(ctx, "YOU ARE")
+    assert find_text(ctx, "Blue")
+
+
+def test_lobby_draws_one_slot_per_colour():
+    from badge.render import LOBBY_DOT_R
+
+    ctx = draw_waiting()
+    slots = [a for a in ctx.arcs if a["radius"] == LOBBY_DOT_R]
+    assert len(slots) == 6
+    # Ready blue: filled dot. Unready orange: stroked in colour.
+    dot_fills = [f for f in ctx.fills if "arc" in f and f["arc"]["radius"] == LOBBY_DOT_R]
+    assert len(dot_fills) == 1
+    assert dot_fills[0]["rgb"] == (0.0, 0.0, 1.0)
+    empty = [a for a in slots if a["rgb"] == (0.18, 0.18, 0.18)]
+    assert len(empty) == 4
+
+
+def test_lobby_marks_own_slot_with_white_ring():
+    from badge.render import LOBBY_DOT_R
+
+    ctx = draw_waiting()
+    rings = [a for a in ctx.arcs if a["radius"] == LOBBY_DOT_R + 4.5]
+    assert len(rings) == 1
+    assert rings[0]["rgb"] == (1, 1, 1)
+
+
+class FakeFinishedSession:
+    def __init__(self):
+        self.server_scores = {"passed": 12, "failed": 3}
+        self.overall_score = 154.37
+        self.badge_scores = {
+            "blue": {"passed": 8, "failed": 1},
+            "orange": {"passed": 4, "failed": 2},
+        }
+        self.players = [
+            {"colour": "blue", "username": "alex", "ready": False},
+            {"colour": "orange", "username": "orange", "ready": False},
+        ]
+        self.badge_colour = "blue"
+        self.badge_count = 2
+        self.dismissed_count = 0
+        self.is_dismissed = False
+        self.rank = 3
+        self.total_games = 27
+
+
+class FakeFinishedApp:
+    def __init__(self):
+        self.session = FakeFinishedSession()
+
+
+def draw_finished(elapsed_ms, mutate=None):
+    ctx = FakeCtx()
+    app = FakeFinishedApp()
+    if mutate:
+        mutate(app)
+    renderer = Renderer(app)
+    renderer._finished_ms = time.ticks_ms() - elapsed_ms
+    renderer._draw_finished(ctx)
+    return ctx
+
+
+def test_finished_score_counts_up_then_lands_exact():
+    from badge.render import COUNT_UP_MS
+
+    ctx = draw_finished(COUNT_UP_MS // 2)
+    assert find_text(ctx, str(int(154.37 // 2)))
+    assert not any("games" in t["text"] for t in ctx.texts)
+
+    ctx = draw_finished(2 * COUNT_UP_MS)
+    assert find_text(ctx, "154.37")
+
+
+def test_finished_rank_reveals_after_count_up():
+    from badge.render import COUNT_UP_MS
+
+    ctx = draw_finished(2 * COUNT_UP_MS)
+    assert find_text(ctx, "#3 of 27 today")
 
 
 def test_ring_blinks_red_when_time_is_low():

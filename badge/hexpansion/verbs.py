@@ -2,7 +2,7 @@ import random
 
 # Flavour pool for button-style commands ("Smash A"). Shared by any module
 # whose commands are plain presses; gesture-style phrases live with their module.
-PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash")
+PRESS_VERBS = ("Press", "Hit", "Push", "Smash", "Bash", "Slam")
 
 
 def random_verb(verbs):

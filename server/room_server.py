@@ -401,8 +401,16 @@ async def ws_handler(request):
                 # already in progress") instead of masking it with a poll snapshot.
                 result = room.start_round(badge_id)
                 state = result if "error" in result else room.poll(badge_id, pending_caps)
+            elif action == "unready":
+                # Errors are swallowed: an unready that loses the race with
+                # round start is harmless, and the poll resyncs the badge.
+                room.unready(badge_id)
+                state = room.poll(badge_id, pending_caps)
             elif action == "dismiss":
                 room.dismiss_score(badge_id)
+                state = room.poll(badge_id, pending_caps)
+            elif action == "undismiss":
+                room.undismiss_score(badge_id)
                 state = room.poll(badge_id, pending_caps)
             else:
                 state = room.poll(badge_id, pending_caps, result=m.get("result"))

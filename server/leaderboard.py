@@ -1,5 +1,6 @@
 import json
 import threading
+from datetime import datetime, timedelta, timezone
 
 from db import open_db
 
@@ -40,6 +41,25 @@ class SqliteLeaderboard:
                     (entry_id, badge_id, counts.get("passed", 0), counts.get("failed", 0)),
                 )
             self._conn.commit()
+
+    def rank_of_score(self, score):
+        """(rank, total_games) for a just-recorded score, last 24 hours.
+
+        Ties share a rank: rank = 1 + number of strictly better games.
+        Timestamps are stored as ISO-8601 UTC, so lexicographic comparison
+        against an ISO cutoff is chronologically correct.
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        with self._lock:
+            higher = self._conn.execute(
+                "SELECT COUNT(*) FROM leaderboard_entries WHERE score > ? AND timestamp >= ?",
+                (score, cutoff),
+            ).fetchone()[0]
+            total = self._conn.execute(
+                "SELECT COUNT(*) FROM leaderboard_entries WHERE timestamp >= ?",
+                (cutoff,),
+            ).fetchone()[0]
+        return higher + 1, total
 
     def entries(self):
         with self._lock:

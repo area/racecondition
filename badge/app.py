@@ -280,7 +280,15 @@ class RaceConditionApp(app.App):
 		# all in-game communication from here on; nothing else is sent over HTTP.
 
 	def _start_round(self):
-		self.net.queue_action("start")
+		# Any button toggles readiness. The local flag is flipped
+		# optimistically so a quick second press sends the opposite action;
+		# the server's next push overwrites it with the truth.
+		if self.session.is_ready:
+			self.net.queue_action("unready")
+			self.session.is_ready = False
+		else:
+			self.net.queue_action("start")
+			self.session.is_ready = True
 
 	def _dismiss_score(self):
 		# If the websocket is down there's no writer to drain the outbox and the
@@ -290,7 +298,14 @@ class RaceConditionApp(app.App):
 		if not self.net.alive:
 			self.session.set_room_state("waiting")
 			return
-		self.net.queue_action("dismiss")
+		# Same toggle as the waiting room: a ready ("dismissed") badge can
+		# back out until everyone is ready.
+		if self.session.is_dismissed:
+			self.net.queue_action("undismiss")
+			self.session.is_dismissed = False
+		else:
+			self.net.queue_action("dismiss")
+			self.session.is_dismissed = True
 
 	def _start_testing(self):
 		modules = self.module_registry.connected_modules()
