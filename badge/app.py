@@ -1,11 +1,12 @@
 import app
+import asyncio
 import ota
 import settings
 import time
 
 from machine import I2C
 
-from app_components import Menu, Notification
+from app_components import Menu, Notification, clear_background
 from events.input import Buttons, ButtonDownEvent, ButtonUpEvent
 from system.eventbus import eventbus
 from system.hexpansion.events import HexpansionRemovalEvent, HexpansionInsertionEvent
@@ -15,37 +16,59 @@ from tildagonos import tildagonos
 
 from .buttons import is_cancel
 from .hexpansion_names import get_friendly_name
-from .hexpansion import ModuleRegistry, CommandStatus
-from .room_client import RoomClient
-from .session import GameSession
-from .test_session import TestSession
 from .constants import BADGE_COLOURS, CANCEL_HOLD_MS
-from .leds import LedRing, fill_frame, fill_up_frame, FLASH_GREEN, FLASH_RED
 from .identity import build_secret_id, derive_public_id
-from .render import Renderer
-from .network import NetworkController
+
+# The launcher runs `__import__` + `RaceConditionApp()` synchronously inside
+# its own event loop, so the screen stays frozen on the launcher menu until
+# both finish — and MicroPython compiles every .py it imports on-device. Only
+# firmware-frozen modules and our few tiny helpers are imported above; the
+# bulk of the app (~1700 lines) is imported in _finish_init() on the first
+# update tick after a frame has been drawn, so it compiles behind the loading
+# screen instead of in front of a frozen launcher. These names are bound as
+# module globals there:
+#   CommandStatus, TestSession,
+#   fill_frame, fill_up_frame, FLASH_GREEN, FLASH_RED
 
 
 class RaceConditionApp(app.App):
 	def __init__(self, room_client=None):
 		self.button_states = Buttons(self)
 		self.notification = None
+		self.menu = None
+		# draw() shows the loading screen until _finish_init() builds the
+		# real renderer.
+		self.renderer = None
+		self._loading = True
+		self._loading_frame_drawn = False
+		self._injected_room_client = room_client
 		# Race Condition relies on hexpansion app-discovery APIs added in
 		# tildagonOS v2; on v1 we bail out early and the renderer shows a
 		# "requires v2" screen instead of crashing deeper in setup.
 		self._os_unsupported = ota.get_version().startswith("v1.")
-		self.renderer = Renderer(self)
 		if self._os_unsupported:
+			from .render import Renderer
+			self.renderer = Renderer(self)
 			# The only interaction on the unsupported screen is backing out:
 			# any button drops us back to the launcher.
 			eventbus.on(ButtonDownEvent, self._on_unsupported_button, self)
 			return
+
+	def _finish_init(self):
+		global CommandStatus, TestSession, fill_frame, fill_up_frame, FLASH_GREEN, FLASH_RED
+		from .hexpansion import ModuleRegistry, CommandStatus
+		from .room_client import RoomClient
+		from .session import GameSession
+		from .test_session import TestSession
+		from .leds import LedRing, fill_frame, fill_up_frame, FLASH_GREEN, FLASH_RED
+		from .render import Renderer
+		from .network import NetworkController
+
 		self._secret_id = build_secret_id()
 		self.badge_id = derive_public_id(self._secret_id)
 		self.session = GameSession()
 		self.module_registry = ModuleRegistry()
-		self.room_client = room_client if room_client is not None else RoomClient()
-		self.menu = None
+		self.room_client = self._injected_room_client if self._injected_room_client is not None else RoomClient()
 		self._room_list = []
 		self._cancel_down_event = None
 		self._test_session = None
@@ -54,16 +77,22 @@ class RaceConditionApp(app.App):
 		self.leds = LedRing(self._write_leds)
 		self._scan()
 		self._ensure_menu()
+		self.renderer = Renderer(self)
 		eventbus.emit(PatternDisable())
 
 		eventbus.on(HexpansionInsertionEvent, self._on_insert, self)
 		eventbus.on(HexpansionRemovalEvent, self._on_remove, self)
 		eventbus.on(ButtonDownEvent, self._on_button_down, self)
 		eventbus.on(ButtonUpEvent, self._on_button_up, self)
+		self._loading = False
 
 	def _cleanup(self):
 		if self._os_unsupported:
 			eventbus.remove(ButtonDownEvent, self._on_unsupported_button, self)
+			return
+		if self._loading:
+			# _finish_init hasn't run: nothing constructed, no handlers
+			# registered, nothing to tear down.
 			return
 		if self.session.in_game:
 			self._leave_room()
@@ -316,10 +345,19 @@ class RaceConditionApp(app.App):
 	async def background_task(self):
 		if self._os_unsupported:
 			return
+		while self._loading:
+			await asyncio.sleep(0.05)
 		await self.net.run()
 
 	def update(self, delta):
 		if self._os_unsupported:
+			return
+		if self._loading:
+			# Give the render task one pass first so the loading frame is on
+			# screen before _finish_init blocks the loop on module compilation
+			# and the I2C scan.
+			if self._loading_frame_drawn:
+				self._finish_init()
 			return
 		if self._test_session is not None:
 			self._test_session.update()
@@ -358,7 +396,24 @@ class RaceConditionApp(app.App):
 			self.notification.update(delta)
 
 	def draw(self, ctx):
+		if self.renderer is None:
+			self._draw_loading(ctx)
+			return
 		self.renderer.draw(ctx)
+
+	def _draw_loading(self, ctx):
+		ctx.save()
+		clear_background(ctx)
+		ctx.text_align = ctx.CENTER
+		ctx.text_baseline = ctx.MIDDLE
+		ctx.rgb(0, 1, 0)
+		ctx.font_size = 24
+		ctx.move_to(0, -10).text("Race Condition")
+		ctx.font_size = 12
+		ctx.rgb(0.5, 0.5, 0.5)
+		ctx.move_to(0, 20).text("loading...")
+		ctx.restore()
+		self._loading_frame_drawn = True
 
 
 # Entry point discovered by the Tildagon app loader when publishing.

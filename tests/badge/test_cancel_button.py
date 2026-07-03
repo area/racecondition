@@ -29,7 +29,11 @@ def _make_app():
         "colour": "red",
     }
     with patch.object(RaceConditionApp, "_scan"):
-        return RaceConditionApp(room_client=room_client)
+        a = RaceConditionApp(room_client=room_client)
+        # On the badge the heavy init is deferred to the first update tick so
+        # a loading frame can render first; tests drive it directly.
+        a._finish_init()
+        return a
 
 
 def _put_in_round(app, module=None):

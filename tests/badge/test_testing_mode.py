@@ -10,6 +10,9 @@ def _make_app(modules=None):
     room_client = MagicMock()
     with patch.object(RaceConditionApp, "_scan"):
         a = RaceConditionApp(room_client=room_client)
+        # On the badge the heavy init is deferred to the first update tick so
+        # a loading frame can render first; tests drive it directly.
+        a._finish_init()
     a.module_registry._connected_modules = {
         m.friendly_name(): m for m in (modules or [])
     }
