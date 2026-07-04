@@ -61,14 +61,19 @@ class SqliteLeaderboard:
             ).fetchone()[0]
         return higher + 1, total
 
-    def entries(self):
+    def entries(self, limit=None):
+        # limit=None returns the full history (the admin page pages through
+        # all games); the public endpoint passes a small limit since its
+        # leaderboard shows only a top-N and the table grows all weekend.
+        sql = """SELECT id, timestamp, room_id, score, commands_passed, commands_failed,
+                        num_badges, total_modules, badges, module_counts
+                 FROM leaderboard_entries
+                 ORDER BY score DESC, num_badges DESC, commands_failed ASC"""
         with self._lock:
-            rows = self._conn.execute(
-                """SELECT id, timestamp, room_id, score, commands_passed, commands_failed,
-                          num_badges, total_modules, badges, module_counts
-                   FROM leaderboard_entries
-                   ORDER BY score DESC, num_badges DESC, commands_failed ASC"""
-            ).fetchall()
+            if limit is not None:
+                rows = self._conn.execute(sql + " LIMIT ?", (limit,)).fetchall()
+            else:
+                rows = self._conn.execute(sql).fetchall()
 
             badge_scores = {}
             module_results = {}

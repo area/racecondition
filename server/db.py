@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS leaderboard_entries (
     badges TEXT NOT NULL,
     module_counts TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_leaderboard_entries_timestamp
+    ON leaderboard_entries(timestamp);
 CREATE TABLE IF NOT EXISTS game_module_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     entry_id INTEGER NOT NULL REFERENCES leaderboard_entries(id),

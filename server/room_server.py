@@ -11,7 +11,12 @@ from pathlib import Path
 
 from aiohttp import web, WSMsgType
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+# Per-frame websocket and per-assignment logs sit at DEBUG; set LOG_LEVEL=DEBUG
+# to get them back when diagnosing. At event scale they were ~300 lines/sec.
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 
 log = logging.getLogger(__name__)
 
@@ -249,11 +254,35 @@ async def list_rooms(request):
     return web.json_response({"rooms": result})
 
 
+# The public index page fetches the leaderboard every 10s per open tab but
+# renders only a top-N, so the endpoint defaults to that same N and caches
+# the built payload briefly — otherwise every phone idling on the page costs a
+# full-history scan. ?limit=0 returns everything (the admin game log); only
+# the default-limit payload is cached, so arbitrary limits can't grow the map.
+# Must match index.html's renderLeaderboard slice(0, 15). Zero-score games
+# sort last, so the client's score>0 filter never leaves the page short.
+_LEADERBOARD_DEFAULT_LIMIT = 15
+_LEADERBOARD_CACHE_TTL_S = 5
+_leaderboard_cache = None  # (expires_at, payload)
+
+
 async def api_leaderboard(request):
-    entries = leaderboard.entries()
+    global _leaderboard_cache
+    try:
+        limit = int(request.query.get("limit", _LEADERBOARD_DEFAULT_LIMIT))
+    except ValueError:
+        limit = _LEADERBOARD_DEFAULT_LIMIT
+    is_default = limit == _LEADERBOARD_DEFAULT_LIMIT
+    now = time.monotonic()
+    if is_default and _leaderboard_cache and _leaderboard_cache[0] > now:
+        return web.json_response(_leaderboard_cache[1])
+    entries = leaderboard.entries(limit if limit > 0 else None)
     badge_ids = {bid for e in entries for bid in e.get("badges", {}).keys()}
     usernames = {bid: user_registry.get(bid) for bid in badge_ids}
-    return web.json_response({"leaderboard": entries, "usernames": usernames})
+    payload = {"leaderboard": entries, "usernames": usernames}
+    if is_default:
+        _leaderboard_cache = (now + _LEADERBOARD_CACHE_TTL_S, payload)
+    return web.json_response(payload)
 
 
 async def api_stats(request):
@@ -343,7 +372,7 @@ async def ws_handler(request):
             if not payload:
                 return  # nothing changed — stay quiet
         body = json.dumps(payload)
-        log.info("ws room=%s badge=%s SEND %s", room_id, badge_short, body)
+        log.debug("ws room=%s badge=%s SEND %s", room_id, badge_short, body)
         await ws.send_str(body)
 
     try:
@@ -380,9 +409,12 @@ async def ws_handler(request):
                 badge_short = badge_id[-6:]
             # Log the message, but never the secret_id — it's the badge's
             # credential. The derived badge_id (above) already identifies the
-            # connection in the log.
-            redacted = {k: ("<redacted>" if k == "secret_id" else v) for k, v in m.items()}
-            log.info("ws room=%s badge=%s RECV %s", room_id, badge_short, json.dumps(redacted))
+            # connection in the log. Guarded: per-frame logs are DEBUG-only
+            # (hundreds of lines/sec at event scale), and the redaction pass
+            # shouldn't run at all when they're off.
+            if log.isEnabledFor(logging.DEBUG):
+                redacted = {k: ("<redacted>" if k == "secret_id" else v) for k, v in m.items()}
+                log.debug("ws room=%s badge=%s RECV %s", room_id, badge_short, json.dumps(redacted))
             if "capabilities" in m:
                 pending_caps = m["capabilities"]
             action = m.get("action")

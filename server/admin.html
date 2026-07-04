@@ -625,7 +625,9 @@
 
         async function refreshGames() {
             try {
-                const data = await fetch("/api/leaderboard").then(r => r.json());
+                // limit=0 = full history: this pager walks every game, unlike
+                // the public page's top-N.
+                const data = await fetch("/api/leaderboard?limit=0").then(r => r.json());
                 allEntries = data.leaderboard || [];
                 allUsernames = data.usernames || {};
                 renderPage();

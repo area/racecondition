@@ -320,7 +320,7 @@ class Room:
                     "time_remaining_s": existing.timeout_s - age,
                     "timeout_s": existing.timeout_s,
                 }
-            log.info("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], existing.module, existing.command)
+            log.debug("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], existing.module, existing.command)
             self._scores["failed"] += 1
             slot.score["failed"] += 1
             self._module_scores.setdefault(existing.module, {"passed": 0, "failed": 0})["failed"] += 1
@@ -334,7 +334,7 @@ class Room:
         assignment_id = "{}-{}".format(id(self), self._next_assignment_id)
         self._next_assignment_id += 1
         timeout = self._assignment_timeout()
-        log.info("room=%s badge=%s assigned module=%s command=%s id=%s", self.room_id, badge_id[-6:], module, command, assignment_id)
+        log.debug("room=%s badge=%s assigned module=%s command=%s id=%s", self.room_id, badge_id[-6:], module, command, assignment_id)
         slot.assignment = Assignment(id=assignment_id, module=module, command=command, issued_at=now, timeout_s=timeout)
         return {
             "id": assignment_id,
