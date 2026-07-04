@@ -150,7 +150,7 @@
     <h2>What a module needs</h2>
     <p>Extend <code>HexpansionModule</code> from <code>badge/hexpansion/base.py</code> and define:</p>
     <table class="api-table">
-        <thead><tr><th>Attribute</th><th>What to do</th></tr></thead>
+        <thead><tr><th>Attribute</th><th>Description</th></tr></thead>
         <tbody>
             <tr>
                 <td>VID, PID</td>
@@ -164,7 +164,7 @@
     </table>
     <p>And define at least one of:</p>
     <table class="api-table">
-        <thead><tr><th>Method</th><th>What to do</th></tr></thead>
+        <thead><tr><th>Method</th><th>Description</th></tr></thead>
         <tbody>
             <tr>
                 <td>on_button_down(event)</td>
@@ -175,9 +175,9 @@
                 <td>Called on every poll (~1 s). If the current command has been satisfied, set <code>self.last_status = CommandStatus.PASSED</code>. Use when relevant hardware doesn't fire events.</td>
         </tbody>
     </table>
-    <p>Optionally, you can also override</p>
+    <p>Optionally, you can also override:</p>
     <table class="api-table">
-        <thead><tr><th>method</th><th>What to do</th></tr></thead>
+        <thead><tr><th>method</th><th>Description</th></tr></thead>
         <tbody>
             <tr>
                 <td>decorate(command)</td>
