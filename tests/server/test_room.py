@@ -350,5 +350,91 @@ class TestAssignmentTimeoutRamp(unittest.TestCase):
         self.assertAlmostEqual(assignment["timeout_s"], self.floor, places=1)
 
 
+class TestPollIfChanged(unittest.TestCase):
+    """The websocket idle tick: nothing to push unless the room's generation
+    moved or a time deadline (round end, assignment timeout) passed."""
+
+    def setUp(self):
+        self.room = _room(1)
+        self.room.join("badge-a", GPS_CAPS)
+        self.room.join("badge-b", GPS_CAPS)
+
+    def _settle(self, badge_id, gen=None):
+        # Polls until quiet: a fall-through poll can itself bump the
+        # generation (issuing an assignment), needing one more pass.
+        for _ in range(5):
+            state, gen = self.room.poll_if_changed(badge_id, gen)
+            if state is None:
+                return gen
+        self.fail("room never settled")
+
+    def _start_round_settled(self):
+        self.room.start_round("badge-a")
+        self.room.start_round("badge-b")
+        self.room.poll("badge-a", None)
+        self.room.poll("badge-b", None)  # both assignments issued
+        return self._settle("badge-a")
+
+    def test_idle_room_returns_none(self):
+        gen = self._settle("badge-a")
+        state, gen_after = self.room.poll_if_changed("badge-a", gen)
+        self.assertIsNone(state)
+        self.assertEqual(gen_after, gen)
+
+    def test_idle_tick_refreshes_liveness(self):
+        gen = self._settle("badge-a")
+        self.room._badges["badge-a"].last_seen -= _room_mod.STALE_BADGE_SECONDS
+        self.room.poll_if_changed("badge-a", gen)
+        # A teammate's poll prunes stale badges; badge-a must survive it.
+        self.room.poll("badge-b", None)
+        self.assertIn("badge-a", self.room._badges)
+
+    def test_teammate_readying_up_is_pushed(self):
+        gen = self._settle("badge-a")
+        self.room.start_round("badge-b")
+        state, _ = self.room.poll_if_changed("badge-a", gen)
+        self.assertIsNotNone(state)
+        self.assertEqual(state["ready_count"], 1)
+
+    def test_teammate_result_is_pushed(self):
+        gen = self._start_round_settled()
+        assignment = self.room.poll("badge-b", None)["assignment"]
+        gen = self._settle("badge-a", gen)
+        self.room.poll("badge-b", None,
+                       result={"assignment_id": assignment["id"], "status": "passed"})
+        state, _ = self.room.poll_if_changed("badge-a", gen)
+        self.assertIsNotNone(state)
+        self.assertEqual(state["scores"]["passed"], 1)
+
+    def test_assignment_timeout_deadline_wakes_idle_room(self):
+        gen = self._start_round_settled()
+        slot = self.room._badges["badge-b"]
+        slot.assignment.issued_at -= slot.assignment.timeout_s + 1
+        state, _ = self.room.poll_if_changed("badge-a", gen)
+        self.assertIsNotNone(state)
+        # The sweep failed badge-b's assignment even though badge-a polled.
+        self.assertEqual(state["scores"]["failed"], 1)
+
+    def test_round_expiry_deadline_wakes_idle_room(self):
+        gen = self._start_round_settled()
+        self.room._round_started_at -= ROUND_DURATION_S + 1
+        state, _ = self.room.poll_if_changed("badge-a", gen)
+        self.assertIsNotNone(state)
+        self.assertEqual(state["room_state"], "finished")
+
+    def test_admin_hurry_wakes_idle_room(self):
+        gen = self._start_round_settled()
+        self.room.set_timer(5)
+        state, _ = self.room.poll_if_changed("badge-a", gen)
+        self.assertIsNotNone(state)
+        self.assertLessEqual(state["time_remaining_s"], 5.0)
+
+    def test_unknown_badge_falls_through_to_readd(self):
+        gen = self._settle("badge-a")
+        state, _ = self.room.poll_if_changed("badge-new", gen)
+        self.assertIsNotNone(state)
+        self.assertIn("badge-new", self.room._badges)
+
+
 if __name__ == "__main__":
     unittest.main()

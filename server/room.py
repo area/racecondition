@@ -70,6 +70,13 @@ class Room:
         self._lock = Lock()
         self._leaderboard = leaderboard if leaderboard is not None else SqliteLeaderboard()
         self._user_registry = user_registry
+        # Monotonic change counter for the whole room: every mutation a
+        # connection might need pushed bumps it (see _bump_generation), so the
+        # websocket loop's idle tick can ask "anything new?" via
+        # poll_if_changed instead of building a full poll response each time.
+        # Never reset — comparisons against a stored value must stay valid
+        # across room resets.
+        self._generation = 0
         self._reset_state()
 
     # ------------------------------------------------------------------ public
@@ -81,6 +88,36 @@ class Room:
                 return {"room_id": self.room_id, "error": "Room is full"}
             self._set_badge(badge_id, _normalize_capabilities(capabilities))
             return self._poll_response(badge_id)
+
+    def generation(self):
+        with self._lock:
+            return self._generation
+
+    def poll_if_changed(self, badge_id, last_gen):
+        """Cheap idle tick for the websocket push loop.
+
+        Refreshes the badge's liveness, then answers "has anything moved?"
+        without building a poll response: nothing has if the room's generation
+        still equals last_gen and no time-driven deadline (round end,
+        assignment timeout) has passed. Returns (state, gen) — state is None
+        when there's nothing to push, otherwise a full poll snapshot.
+
+        gen is captured before the fall-through poll, so changes the poll
+        itself makes (issuing an assignment bumps the generation) leave the
+        stored value behind; the next tick then runs one redundant poll whose
+        delta is empty, and converges. That keeps this correct even if a
+        mutation lands between the check and the poll.
+        """
+        with self._lock:
+            gen = self._generation
+            slot = self._badges.get(badge_id)
+            if slot is not None:
+                slot.last_seen = self._now()
+                if gen == last_gen and not self._deadline_due():
+                    return None, last_gen
+            # Unknown badge (stale-pruned mid-connection) falls through: the
+            # full poll re-adds it, as the always-poll loop used to.
+        return self.poll(badge_id, None), gen
 
     def poll(self, badge_id, capabilities, result=None):
         with self._lock:
@@ -106,6 +143,7 @@ class Room:
             self._prune_stale()
             if self._badges.pop(badge_id, None) is not None:
                 self._command_pool_cache = None
+                self._bump_generation()
             self._ready.discard(badge_id)
             self._dismissed.discard(badge_id)
             if not self._badges:
@@ -131,6 +169,7 @@ class Room:
                 # Readiness is part of the players payload, which is only
                 # re-sent when the generation moves.
                 self._players_generation += 1
+                self._bump_generation()
             if not (set(self._badges.keys()) - self._ready):
                 self._start_round_locked()
                 return {"room_id": self.room_id, "status": "started", "room_state": "in-round"}
@@ -146,6 +185,7 @@ class Room:
             if badge_id in self._ready:
                 self._ready.discard(badge_id)
                 self._players_generation += 1
+                self._bump_generation()
             return {"room_id": self.room_id, "status": "unready", "room_state": "waiting", "ready_count": len(self._ready)}
 
     def set_timer(self, seconds):
@@ -153,19 +193,25 @@ class Room:
             if self._state != "in-round" or self._round_started_at is None:
                 return {"room_id": self.room_id, "error": "Room not in-round"}
             self._round_started_at = self._now() - (ROUND_DURATION_S - seconds)
+            # The timer isn't in any generation-tracked payload, but the jump
+            # must still wake idle connections so the anchor logic pushes it.
+            self._bump_generation()
             return {"room_id": self.room_id, "status": "ok", "time_remaining_s": float(seconds)}
 
     def dismiss_score(self, badge_id):
         with self._lock:
             if self._state == "finished":
-                self._dismissed.add(badge_id)
+                if badge_id not in self._dismissed:
+                    self._dismissed.add(badge_id)
+                    self._bump_generation()
                 self._check_all_dismissed()
             return {"room_id": self.room_id, "status": "ok", "room_state": self._state}
 
     def undismiss_score(self, badge_id):
         with self._lock:
-            if self._state == "finished":
+            if self._state == "finished" and badge_id in self._dismissed:
                 self._dismissed.discard(badge_id)
+                self._bump_generation()
             return {"room_id": self.room_id, "status": "ok", "room_state": self._state}
 
     def admin_snapshot(self):
@@ -206,6 +252,7 @@ class Room:
     # ----------------------------------------------------------------- private
 
     def _reset_state(self):
+        self._bump_generation()
         self._badges = {}
         self._module_scores = {}
         self._next_assignment_id = 1
@@ -221,6 +268,26 @@ class Room:
     def _now(self):
         return time.monotonic()
 
+    def _bump_generation(self):
+        # Call on any mutation a connected badge might need pushed; missing a
+        # bump means poll_if_changed sits quiet and the change is never sent.
+        self._generation += 1
+
+    def _deadline_due(self):
+        # Time-driven changes bump no generation, so the idle tick checks
+        # deadlines explicitly: the round ending, or any badge's assignment
+        # timing out (which fails it and re-issues — state everyone shows).
+        if self._state != "in-round" or self._round_started_at is None:
+            return False
+        now = self._now()
+        if now - self._round_started_at >= ROUND_DURATION_S:
+            return True
+        return any(
+            slot.assignment is not None
+            and now - slot.assignment.issued_at >= slot.assignment.timeout_s
+            for slot in self._badges.values()
+        )
+
     def _start_round_locked(self):
         self._state = "in-round"
         self._round_started_at = self._now()
@@ -231,6 +298,7 @@ class Room:
         # Ready flags travel in the players payload; clearing them must
         # trigger a re-send.
         self._players_generation += 1
+        self._bump_generation()
         for slot in self._badges.values():
             slot.score = {"passed": 0, "failed": 0}
             slot.assignment = None
@@ -253,6 +321,7 @@ class Room:
             self._reset_state()
         elif stale:
             self._players_generation += 1
+            self._bump_generation()
             if self._state == "finished":
                 self._check_all_dismissed()
             elif self._state == "waiting":
@@ -270,11 +339,13 @@ class Room:
             )
             self._players_generation += 1
             self._command_pool_cache = None
+            self._bump_generation()
         else:
             slot = self._badges[badge_id]
             if capabilities is not None:
                 slot.capabilities = capabilities
                 self._command_pool_cache = None
+                self._bump_generation()
             slot.last_seen = self._now()
 
     def _command_pool(self):
@@ -304,6 +375,27 @@ class Room:
         frac = max(0.0, min(1.0, elapsed / ROUND_DURATION_S))
         return ASSIGNMENT_TIMEOUT_S - (ASSIGNMENT_TIMEOUT_S - ASSIGNMENT_TIMEOUT_FLOOR_S) * frac
 
+    def _fail_assignment(self, badge_id, slot):
+        assignment = slot.assignment
+        log.debug("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], assignment.module, assignment.command)
+        self._scores["failed"] += 1
+        slot.score["failed"] += 1
+        self._module_scores.setdefault(assignment.module, {"passed": 0, "failed": 0})["failed"] += 1
+        slot.assignment = None
+        self._bump_generation()
+
+    def _expire_assignments(self):
+        # Sweep every badge's assignment, not just the poller's: with the
+        # generation-gated idle tick, whichever connection wakes first must
+        # clear the deadline for the whole room, or every other connection
+        # keeps seeing _deadline_due and re-polling until the affected badge
+        # itself shows up.
+        now = self._now()
+        for bid, slot in self._badges.items():
+            a = slot.assignment
+            if a is not None and now - a.issued_at >= a.timeout_s:
+                self._fail_assignment(bid, slot)
+
     def _assignment_for(self, badge_id):
         now = self._now()
         slot = self._badges.get(badge_id)
@@ -320,11 +412,10 @@ class Room:
                     "time_remaining_s": existing.timeout_s - age,
                     "timeout_s": existing.timeout_s,
                 }
-            log.debug("room=%s badge=%s timed out module=%s command=%s", self.room_id, badge_id[-6:], existing.module, existing.command)
-            self._scores["failed"] += 1
-            slot.score["failed"] += 1
-            self._module_scores.setdefault(existing.module, {"passed": 0, "failed": 0})["failed"] += 1
-            slot.assignment = None
+            # Normally _expire_assignments has already swept this; it can
+            # still trip on an assignment that expires between the sweep and
+            # here.
+            self._fail_assignment(badge_id, slot)
 
         candidates = [(m, c) for m, c in self._command_pool() if self._badge_can_run(badge_id, m, c)]
         if not candidates:
@@ -336,6 +427,7 @@ class Room:
         timeout = self._assignment_timeout()
         log.debug("room=%s badge=%s assigned module=%s command=%s id=%s", self.room_id, badge_id[-6:], module, command, assignment_id)
         slot.assignment = Assignment(id=assignment_id, module=module, command=command, issued_at=now, timeout_s=timeout)
+        self._bump_generation()
         return {
             "id": assignment_id,
             "module": module,
@@ -389,6 +481,7 @@ class Room:
         slot.score[status] += 1
         self._module_scores.setdefault(slot.assignment.module, {"passed": 0, "failed": 0})[status] += 1
         slot.assignment = None
+        self._bump_generation()
 
     def _check_expiry(self):
         if self._state != "in-round" or self._round_started_at is None:
@@ -396,6 +489,7 @@ class Room:
         if self._now() - self._round_started_at >= ROUND_DURATION_S:
             self._state = "finished"
             self._dismissed = set()
+            self._bump_generation()
             self._record_score()
 
     def _calculate_score(self):
@@ -442,6 +536,7 @@ class Room:
             self._state = "waiting"
             self._dismissed = set()
             self._round_started_at = None
+            self._bump_generation()
 
     def _time_remaining_s(self):
         if self._state != "in-round" or self._round_started_at is None:
@@ -456,6 +551,8 @@ class Room:
     def _poll_response(self, badge_id):
         self._check_expiry()
         in_round = self._state == "in-round"
+        if in_round:
+            self._expire_assignments()
         current_gen = self._players_generation
         slot = self._badges.get(badge_id)
         if slot is not None and slot.last_sent_gen != current_gen:

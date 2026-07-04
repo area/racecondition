@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 # WebSocket handshake, frame (de)masking, ping/pong heartbeat and connection
 # timeouts. This module only carries the game's delta-push logic on top.
 
-_WS_PUSH_INTERVAL = 0.1  # seconds between periodic state pushes
+_WS_PUSH_INTERVAL = 0.1  # seconds between idle change checks (see poll_if_changed)
 _WS_TIMER_JUMP_S = 1.0   # resend the round timer only when it deviates this much
 _WS_HEARTBEAT_S = 20.0   # aiohttp pings the badge this often; dead links get dropped
 
@@ -37,8 +37,8 @@ def _ws_comparable(state):
     A poll-state aliases the room's live dicts (scores, badge_scores), which are
     mutated in place as the room updates, so those must be snapshotted or the
     diff would never detect the change. We copy only the dicts we either alias
-    or mutate below — not the whole tree — to keep this off the hot path (it runs
-    per badge every push interval).
+    or mutate below — not the whole tree — to keep it cheap (it runs per badge
+    whenever the room's generation moves; idle ticks skip it entirely).
 
     Every timer is then dropped: the round timer (top-level time_remaining_s)
     and the per-assignment / per-display timers all tick every poll, and the
@@ -351,6 +351,7 @@ async def ws_handler(request):
     pending_caps = None
     last_comparable = None
     timer_anchor = None
+    last_room_gen = None  # room generation as of our last send; None = resync
     joined = False
 
     async def send_state(state, full=False):
@@ -382,16 +383,19 @@ async def ws_handler(request):
             try:
                 msg = await ws.receive(timeout=_WS_PUSH_INTERVAL)
             except asyncio.TimeoutError:
-                # Idle: once joined, push a delta so the badge sees any change.
+                # Idle: once joined, check for changes to push. poll_if_changed
+                # refreshes liveness and returns None unless the room's
+                # generation moved or a timer deadline passed — the common case
+                # costs an integer compare instead of a full poll-and-diff.
                 if joined:
-                    state = room.poll(badge_id, None, result=None)
+                    state, last_room_gen = room.poll_if_changed(badge_id, last_room_gen)
                     # A joined badge can be stale-pruned mid-connection (an event
                     # loop stall longer than STALE_BADGE_SECONDS between polls); if
-                    # the room has since filled, poll returns a capacity error.
-                    # Don't forward it — that would eject a badge from a game it's
-                    # actively playing. Stay quiet; a later poll re-adds it once
-                    # there's room.
-                    if "error" not in state:
+                    # the room has since filled, the re-add poll returns a capacity
+                    # error. Don't forward it — that would eject a badge from a
+                    # game it's actively playing. Stay quiet; a later poll re-adds
+                    # it once there's room.
+                    if state is not None and "error" not in state:
                         await send_state(state)
                 continue
 
@@ -418,6 +422,11 @@ async def ws_handler(request):
             if "capabilities" in m:
                 pending_caps = m["capabilities"]
             action = m.get("action")
+            # Captured before acting: our own action may bump the generation,
+            # and the full snapshot below carries those changes, so resuming
+            # idle ticks from the pre-action value costs at most one redundant
+            # (empty-delta) poll rather than ever missing a push.
+            gen_before = room.generation()
 
             if action == "leave":
                 break
@@ -449,6 +458,7 @@ async def ws_handler(request):
             # Explicit requests always get a full snapshot so the badge fully
             # resyncs on any interaction.
             await send_state(state, full=True)
+            last_room_gen = gen_before
 
     except Exception as exc:
         log.info("ws room=%s badge=%s error: %s", room_id, badge_short, exc)
