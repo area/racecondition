@@ -139,12 +139,12 @@
 
 <div class="page">
     <h1>Adding Hexpansion support</h1>
-    <p class="lead">Each supported Hexpansion has a small Python class in <code>badge/hexpansion/</code>. It declares the VID/PID for detection, the commands it can receive, and how to tell when a command has been carried out. Everything else is handled by the base class.</p>
+    <p class="lead">The code lives on <a href="https://github.com/area/racecondition">Github</a> - clone it to work on adding support for another hexpansion. Each supported Hexpansion has a small Python class in <code>badge/hexpansion/</code>. It declares the VID/PID for detection, the commands it can receive, and how to tell when a command has been carried out. Everything else is handled by the base class.</p>
 
     <h2>What a module needs</h2>
     <p>Extend <code>HexpansionModule</code> from <code>badge/hexpansion/base.py</code> and define:</p>
     <table class="api-table">
-        <thead><tr><th>Attribute / method</th><th>What to do</th></tr></thead>
+        <thead><tr><th>Attribute</th><th>What to do</th></tr></thead>
         <tbody>
             <tr>
                 <td>VID, PID</td>
@@ -158,7 +158,7 @@
     </table>
     <p>And define at least one of:</p>
     <table class="api-table">
-        <thead><tr><th>Attribute / method</th><th>What to do</th></tr></thead>
+        <thead><tr><th>Method</th><th>What to do</th></tr></thead>
         <tbody>
             <tr>
                 <td>on_button_down(event)</td>
@@ -167,6 +167,16 @@
             <tr>
                 <td>check_command()</td>
                 <td>Called on every poll (~1 s). If the current command has been satisfied, set <code>self.last_status = CommandStatus.PASSED</code>. Use when relevant hardware doesn't fire events.</td>
+        </tbody>
+    </table>
+    <p>Optionally, you can also override</p>
+    <table class="api-table">
+        <thead><tr><th>method</th><th>What to do</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>decorate(command)</td>
+                <td>A <code>classmethod</code> that turns a bare command name into the phrase shown on screen, e.g. <code>"a"</code> becomes "Smash A". This is not necessary, especially if your commands are clear, but it adds flavour. It is for display only, and even if the same command resolves to pontentially multiple strings (e.g. "Smash A" and "Bash A"), they are the same command. It's a <code>classmethod</code> because an instruction typically describes another badge's Hexpansion - there may be no instance, so it can't use per-instance state. If not overridden, the commands are shown directly. See <code>Tildagon2024</code> (random verb + arrow glyphs) and <code>MegaDrive</code> (combo glyph sequences like "↓ ↘ → A") for examples.</td>
+            </tr>
         </tbody>
     </table>
 
@@ -185,10 +195,9 @@
         button = <span class="hl-fn">getattr</span>(event, <span class="hl-str">"button"</span>, <span class="hl-kw">None</span>)
         <span class="hl-kw">if</span> button <span class="hl-kw">is None</span>:
             <span class="hl-kw">return</span>
-        <span class="hl-kw">if</span> button.group != <span class="hl-str">"BigRedButton"</span>:
+        <span class="hl-kw">if</span> button.group != <span class="hl-str">"BigRedButton"</span>: <span class="hl-cmt"># This string comes from your EEPROM app</span>
             <span class="hl-kw">return</span>
-        <span class="hl-kw">if</span> self.current_command == <span class="hl-str">"press"</span>:
-            self.last_status = CommandStatus.PASSED</code></pre>
+        self.last_status = CommandStatus.PASSED</code></pre>
 
     <p>Because the button press sets <code>self.last_status</code> directly, nothing else needs overriding.</p>
 
@@ -211,9 +220,9 @@ MODULE_TYPES = [
     </div>
 
     <h2>Test it on hardware</h2>
-    <p>Build the published payload and copy it to the badge, then reset it:</p>
-    <pre><code>git archive --worktree-attributes --format=tar "$(git write-tree)" | tar -x -C /tmp/rc-payload
-pipx run mpremote cp -r /tmp/rc-payload/* :/apps/racecondition/ && pipx run mpremote reset</code></pre>
+    <p>With the badge plugged in over USB, run:</p>
+    <pre><code>scripts/deploy-dev.sh</code></pre>
+    <p>This requires either <code>mpremote</code> or <code>pipx</code> available, and builds the published payload from your working tree (uncommitted and untracked files included, so no <code>git add</code> needed while testing), installs it to <code>/apps/racecondition_dev/</code> on the badge and resets it. It shows up in the launcher as <strong>Race Condition (dev)</strong>, alongside any store-installed copy.</p>
     <p>Then, with your Hexpansion plugged in, open the Race Condition app and select <strong>Test modules</strong> from the main menu and pick your hexpansion. It will step through each detected command for the hexpansion; perform the action and it advances automatically (hold Cancel for 2 s to skip). If your module doesn't appear it wasn't detected - check that its VID/PID is in <code>badge/hexpansion_names.py</code> and regenerate with <code>scripts/generate_hexpansion_names.py</code> if needed.</p>
 
 </div>

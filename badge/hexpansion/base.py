@@ -22,8 +22,7 @@ class HexpansionModule:
     # received from the server is always the bare token, so this never affects
     # results. A classmethod because the instruction describes another badge's
     # assignment, whose module may not be plugged into this badge — we only have
-    # the class, looked up by name. Default is no decoration; modules with
-    # button- or gesture-style commands override.
+    # the class, looked up by name. Default is no decoration
     @classmethod
     def decorate(cls, command):
         return command
