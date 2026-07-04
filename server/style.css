@@ -74,6 +74,15 @@ nav {
     transition: color 0.12s, background 0.12s;
 }
 .nav-links a:hover { color: var(--silk); background: rgba(200, 230, 180, 0.06); }
+/* Separates the section anchors from links that leave the index page. */
+.nav-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 8px 8px;
+    background: var(--trace);
+}
+.nav-links a.nav-page { color: var(--silk-dim); font-style: italic; }
+.nav-links a.nav-page:hover { color: var(--silk); }
 .nav-back {
     font-size: 12px;
     font-family: "IBM Plex Mono", monospace;

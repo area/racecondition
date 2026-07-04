@@ -4,7 +4,7 @@
 
 Race Condition is a love letter to Spaceteam written through [EMFCamp](https://emfcamp.org)-tinted glasses. Everyone who wants to play together joins the same room, and everyone's screen shows an instruction meant for *someone else*. To clear it, you have to communicate it to the right player - and act on the instructions being shouted at *you* - before the timer runs out.
 
-See the [site](https://racecondition.area.io) for more details.
+See the [about page on the site](https://racecondition.area.io/about) for more details about what this is and how it came to be.
 
 ## Project layout
 

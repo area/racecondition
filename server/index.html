@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Race Condition</title>
+    <meta name="description" content="Race Condition is a cooperative Spaceteam-style game for 1-6 players on the Tildagon badge at EMF Camp. Live rooms, leaderboard, and stats.">
+    <meta property="og:title" content="Race Condition for Tildagon">
+    <meta property="og:description" content="A cooperative Spaceteam-style game for EMF Camp badges. Yell commands, plug in hexpansions, top the leaderboard.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://racecondition.area.io/">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -34,6 +40,12 @@
             color: var(--copper);
         }
         .section-sub { color: var(--silk-dim); font-size: 13px; }
+        /* A second heading inside a section-wrap (leaderboard lives under stats).
+           scroll-margin keeps the #leaderboard anchor clear of the sticky nav. */
+        .subsection-header {
+            margin-top: 48px;
+            scroll-margin-top: 68px;
+        }
 
         /* ── About / hero ── */
         .about-grid {
@@ -404,7 +416,44 @@
         @media (max-width: 620px) {
             .about-grid { grid-template-columns: 1fr; }
             .hero-text h1 { font-size: 28px; }
-            .nav-links a { padding: 6px 8px; font-size: 11px; }
+
+            /* Header: the page is one scroll on a phone, so drop the section
+               anchors and keep only the brand and the off-page links. */
+            .nav-links a:not(.nav-page) { display: none; }
+            .nav-divider { display: none; }
+
+            /* Leaderboard: 7 columns don't fit, so each row becomes a card.
+               Scoped to .lb-table — the stats module table is 4 columns and
+               fits as-is. Cell order in the markup: rank, score, team,
+               passed, failed, hexpansions, when. */
+            .lb-table, .lb-table tbody { display: block; }
+            .lb-table thead { display: none; }
+            .lb-table tbody tr {
+                display: grid;
+                grid-template-columns: auto 1fr auto;
+                grid-template-areas:
+                    "rank score ts"
+                    "mods mods  mods"
+                    "pass fail  fail";
+                align-items: baseline;
+                column-gap: 12px;
+                row-gap: 4px;
+                padding: 12px 2px;
+            }
+            .lb-table tbody td { padding: 0; }
+            .lb-table td:nth-child(1) { grid-area: rank; width: auto; text-align: left; }
+            .lb-table td:nth-child(2) { grid-area: score; }
+            /* Team names are hidden: the per-badge hexpansion rows repeat them. */
+            .lb-table td:nth-child(3) { display: none; }
+            .lb-table td:nth-child(4) { grid-area: pass; text-align: left; font-size: 13px; }
+            .lb-table td:nth-child(5) { grid-area: fail; text-align: left; font-size: 13px; }
+            .lb-table td:nth-child(6) { grid-area: mods; }
+            .lb-table td:nth-child(7) { grid-area: ts; }
+            .lb-table td.pass::before { content: "✓ "; }
+            .lb-table td.pass::after { content: " passed"; font-weight: 400; color: var(--silk-dim); }
+            .lb-table td.fail::before { content: "✗ "; }
+            .lb-table td.fail::after { content: " failed"; font-weight: 400; color: var(--silk-dim); }
+            .lb-table td.empty { grid-column: 1 / -1; }
         }
     </style>
 </head>
@@ -416,8 +465,10 @@
         <a href="#about">About</a>
         <a href="#hexpansions">Hexpansions</a>
         <a href="#status">Status</a>
-        <a href="#leaderboard">Leaderboard</a>
         <a href="#stats">Stats</a>
+        <span class="nav-divider"></span>
+        <a class="nav-page" href="/about">More details</a>
+        <a class="nav-page" href="/hexpansions">Dev guide</a>
     </div>
 </nav>
 
@@ -550,13 +601,26 @@
     </div>
 </div>
 
-<!-- ── Leaderboard ── -->
-<div class="section-wrap" id="leaderboard">
+<!-- ── Stats & leaderboard ── -->
+<div class="section-wrap" id="stats">
     <div class="section-header">
+        <h2>Stats</h2>
+        <span class="section-sub">Across all games ever</span>
+    </div>
+    <div id="stats-content" style="display:none">
+        <div class="stats-grid" id="stats-cards"></div>
+        <div id="stats-modules"></div>
+    </div>
+    <div id="stats-empty" class="coming-soon">
+        <div class="coming-soon-icon">📊</div>
+        <div>No games yet</div>
+    </div>
+
+    <div class="section-header subsection-header" id="leaderboard">
         <h2>Leaderboard</h2>
         <span class="section-sub">
             Top scores &nbsp;
-            <button class="info-btn" onclick="document.getElementById('score-info').classList.toggle('open')">how scores work</button>
+            <button class="info-btn" aria-expanded="false" aria-controls="score-info" onclick="this.setAttribute('aria-expanded', document.getElementById('score-info').classList.toggle('open'))">how scores work</button>
         </span>
     </div>
     <div class="info-panel" id="score-info">
@@ -564,7 +628,7 @@
         <div class="formula">score = commands_passed × √(badges) × avg_hexpansions_per_badge</div>
         <p>A larger team multiplies your score more than a solo player, and having more Hexpansions attached gives a further boost.</p>
     </div>
-    <table>
+    <table class="lb-table">
         <thead>
             <tr>
                 <th>#</th>
@@ -580,22 +644,6 @@
             <tr><td colspan="7" class="empty">Loading...</td></tr>
         </tbody>
     </table>
-</div>
-
-<!-- ── Stats ── -->
-<div class="section-wrap" id="stats">
-    <div class="section-header">
-        <h2>Stats</h2>
-        <span class="section-sub">Across all games ever</span>
-    </div>
-    <div id="stats-content" style="display:none">
-        <div class="stats-grid" id="stats-cards"></div>
-        <div id="stats-modules"></div>
-    </div>
-    <div id="stats-empty" class="coming-soon">
-        <div class="coming-soon-icon">📊</div>
-        <div>No games yet</div>
-    </div>
 </div>
 
 <div class="page-footer" id="page-footer">Race Condition @ EMF Camp</div>
@@ -716,9 +764,13 @@
         prevKeys = newKeys;
     }
 
+    let lastLbBody = null;
     async function refreshLeaderboard() {
         try {
-            const data = await fetch('/api/leaderboard').then(r => r.json());
+            const body = await fetch('/api/leaderboard').then(r => r.text());
+            if (body === lastLbBody) return;
+            lastLbBody = body;
+            const data = JSON.parse(body);
             renderLeaderboard(data.leaderboard || [], data.usernames || {});
         } catch {}
     }
@@ -797,19 +849,23 @@
             </tr></thead><tbody>${rows}</tbody></table>`;
     }
 
+    let lastStatsBody = null;
     async function refreshStats() {
         try {
-            const s = await fetch('/api/stats').then(r => r.json());
-            renderStats(s);
+            const body = await fetch('/api/stats').then(r => r.text());
+            if (body === lastStatsBody) return;
+            lastStatsBody = body;
+            renderStats(JSON.parse(body));
         } catch {}
     }
 
-    refreshStatus();
-    refreshLeaderboard();
-    refreshStats();
-    setInterval(refreshStatus, 10000);
-    setInterval(refreshLeaderboard, 10000);
-    setInterval(refreshStats, 30000);
+    // Poll only while the tab is visible; catch up as soon as it comes back.
+    function refreshAll() { refreshStatus(); refreshLeaderboard(); refreshStats(); }
+    refreshAll();
+    setInterval(() => { if (!document.hidden) refreshStatus(); }, 10000);
+    setInterval(() => { if (!document.hidden) refreshLeaderboard(); }, 10000);
+    setInterval(() => { if (!document.hidden) refreshStats(); }, 30000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
 </script>
 </body>
 </html>
