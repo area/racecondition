@@ -61,7 +61,7 @@ ADJECTIVES = [
     'constant', 'constitutional', 'contagious', 'contemporary', 'content',
     'continental', 'continued', 'continuous', 'controlled', 'controversial',
     'convenient', 'conventional', 'convinced', 'convincing', 'convoluted',
-    'cool', 'cooperative', 'coordinated', 'coral', 'corporate', 'correct',
+    'cool', 'co-operative', 'coordinated', 'coral', 'corporate', 'correct',
     'corresponding', 'corrupt', 'cosmic', 'costly', 'counting', 'courageous',
     'covering', 'cowardly', 'cozy', 'crabby', 'cranky', 'crazy', 'creamy',
     'creative', 'credible', 'creepy', 'criminal', 'crimson', 'crispy',

@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Race Condition</title>
-    <meta name="description" content="Race Condition is a cooperative Spaceteam-style game for 1-6 players on the Tildagon badge at EMF Camp. Live rooms, leaderboard, and stats.">
+    <meta name="description" content="Race Condition is a co-operative Spaceteam-style game for 1-6 players on the Tildagon badge at EMF Camp. Live rooms, leaderboard, and stats.">
     <meta property="og:title" content="Race Condition for Tildagon">
-    <meta property="og:description" content="A cooperative Spaceteam-style game for EMF Camp badges. Yell commands, plug in hexpansions, top the leaderboard.">
+    <meta property="og:description" content="A co-operative Spaceteam-style game for EMF Camp badges. Yell commands, plug in hexpansions, top the leaderboard.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://racecondition.area.io/">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -52,7 +52,7 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 36px;
-            align-items: start;
+            align-items: stretch;
         }
         .hero-text h1 {
             margin: 0 0 14px;
@@ -75,9 +75,11 @@
             border: 1px solid var(--trace);
             border-radius: 4px;
             padding: 20px 22px;
+            display: flex;
+            flex-direction: column;
         }
         .how-to-play h3 {
-            margin: 0 0 14px;
+            margin: 0;
             font-family: "Space Mono", monospace;
             font-size: 10px;
             font-weight: 700;
@@ -85,18 +87,37 @@
             text-transform: uppercase;
             color: var(--copper);
         }
-        .steps { list-style: none; padding: 0; margin: 0; }
-        .steps li {
+        .steps {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .steps > li:not(.step-sep) {
             display: flex;
             gap: 11px;
-            align-items: flex-start;
-            padding: 9px 0;
+            align-items: center;
             font-size: 13.5px;
             line-height: 1.55;
-            border-bottom: 1px solid var(--trace);
             color: var(--silk-mid);
         }
-        .steps li:last-child { border-bottom: none; padding-bottom: 0; }
+        /* Flex-filling separators share the card's spare height equally — one
+           between each pair of steps plus one above step 1 and below step 5 —
+           so every gap matches and each divider line stays centred in its gap. */
+        .step-sep {
+            flex: 1;
+            min-height: 14px;
+            display: flex;
+            align-items: center;
+        }
+        .step-sep::before {
+            content: "";
+            width: 100%;
+            height: 1px;
+            background: var(--trace);
+        }
         .step-num {
             flex-shrink: 0;
             width: 20px;
@@ -111,8 +132,49 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-top: 2px;
         }
+
+        /* ── Install CTA ── */
+        .install-cta {
+            margin-top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background: var(--surface);
+            border: 1px solid var(--trace);
+            border-radius: 4px;
+            padding: 20px 22px;
+        }
+        .install-copy h3 {
+            margin: 0 0 7px;
+            font-family: "Space Mono", monospace;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--copper);
+        }
+        .install-copy p {
+            margin: 0;
+            font-size: 13.5px;
+            line-height: 1.55;
+            color: var(--silk-mid);
+            max-width: 44ch;
+        }
+        .install-copy strong { color: var(--silk); font-weight: 600; }
+        .install-code-wrap { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        .install-code {
+            font-family: "Space Mono", monospace;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            color: var(--silk);
+            background: rgba(200, 121, 58, 0.08);
+            border: 1px solid rgba(200, 121, 58, 0.28);
+            border-radius: 3px;
+            padding: 8px 18px;
+        }
+        .install-seq { display: flex; gap: 4px; }
 
         /* ── Hexpansions ── */
         .hexp-intro {
@@ -423,7 +485,7 @@
             .nav-divider { display: none; }
 
             /* Leaderboard: 7 columns don't fit, so each row becomes a card.
-               Scoped to .lb-table — the stats module table is 4 columns and
+               Scoped to .lb-table - the stats module table is 4 columns and
                fits as-is. Cell order in the markup: rank, score, team,
                passed, failed, hexpansions, when. */
             .lb-table, .lb-table tbody { display: block; }
@@ -477,32 +539,57 @@
     <div class="about-grid">
         <div class="hero-text">
             <h1>Race Condition<br>for Tildagon</h1>
-            <p class="tagline">Race Condition is a love letter to <a href="https://en.wikipedia.org/wiki/Spaceteam">Spaceteam</a> written through <a href="https://emfcamp.org/">EMFCamp</a>-tinted glasses. It is a cooperative game for 1-6 players, played on the Tildagon (and hexpansions). Each badge shows commands meant for someone else (unless playing alone). Calmly and clearly tell your teammates what to do, and successfully carry out as many commands as you can before time runs out.</p>
+            <p class="tagline">Race Condition is a love letter to <a href="https://en.wikipedia.org/wiki/Spaceteam">Spaceteam</a> written through <a href="https://emfcamp.org/">EMFCamp</a>-tinted glasses. It is a co-operative game for 1-6 players, played on the Tildagon (and hexpansions). Each badge shows commands meant for someone else (unless playing alone). Calmly and clearly tell your teammates what to do, and successfully carry out as many commands as you can before time runs out.</p>
             <p class="tagline" style="margin-top: 16px;">For a slightly more in-depth explanation about where this came from and how it came to be, check the <a href="/about">about page</a>.</p>
+            <div class="install-cta">
+                <div class="install-copy">
+                    <h3>Get it on your badge</h3>
+                    <p>Install from the Tildagon app store - look for <strong>Race Condition</strong> under <strong>Games</strong>, or punch in the store code. Both 2024 and 2026 badges are supported, but you must have upgraded to v2 of the Tildagon Firmware.</p>
+                </div>
+                <div class="install-code-wrap">
+                    <div class="install-code">44032200</div>
+                    <div class="install-seq" title="The store code, as badge button presses">
+                        <span class="cmd-chip" title="down-left">↙</span>
+                        <span class="cmd-chip" title="down-left">↙</span>
+                        <span class="cmd-chip" title="top">↑</span>
+                        <span class="cmd-chip" title="bottom">↓</span>
+                        <span class="cmd-chip" title="bottom-right">↘</span>
+                        <span class="cmd-chip" title="bottom-right">↘</span>
+                        <span class="cmd-chip" title="top">↑</span>
+                        <span class="cmd-chip" title="top">↑</span>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="how-to-play">
             <h3>How to play</h3>
             <ol class="steps">
+                <li class="step-sep" aria-hidden="true"></li>
                 <li>
                     <span class="step-num">1</span>
                     <span>One player creates a room from their badge. Everyone else joins by selecting the same room number.</span>
                 </li>
+                <li class="step-sep" aria-hidden="true"></li>
                 <li>
                     <span class="step-num">2</span>
-                    <span>Each badge gets a different colour.</span>
+                    <span>Each badge gets a different colour. When everyone has joined the room and has marked themselves 'ready', the game begins.</span>
                 </li>
+                <li class="step-sep" aria-hidden="true"></li>
                 <li>
                     <span class="step-num">3</span>
-                    <span>Your badge shows commands for <em>other</em> colours: "Green: press Button A on the Tildagon". Communicate that instruction to the correct player while everyone else is doing the same in, presumably, a calm and orderly fashion.</span>
+                    <span>Your badge shows commands for <em>other</em> players. For example, as the blue player, you might see "Green: Tildagon: Press ↑". Communicate that instruction to the green player, while everyone else is doing the same in, presumably, a calm and orderly fashion.</span>
                 </li>
+                <li class="step-sep" aria-hidden="true"></li>
                 <li>
                     <span class="step-num">4</span>
-                    <span>Simultaneously, carry out the command you're being told to by a teammate. Complete it and your teammate gets a new command.</span>
+                    <span>Simultaneously, carry out the command you're being told to by one or more of your teammates. Complete it and your teammate gets a new command.</span>
                 </li>
+                <li class="step-sep" aria-hidden="true"></li>
                 <li>
                     <span class="step-num">5</span>
                     <span>Pass as many commands as possible before the 2-minute timer hits zero. More players and Hexpansions mean a higher score multiplier.</span>
                 </li>
+                <li class="step-sep" aria-hidden="true"></li>
             </ol>
         </div>
     </div>
@@ -518,7 +605,7 @@
         <div class="hexp-card">
             <h3>🔷 Tildagon 2024</h3>
             <div class="hexp-tag hexp-builtin">Badge</div>
-            <p class="hexp-desc">The trusty old 2024 Tildagon. Press any of the six buttons around the edge — each shown as the arrow pointing at it — or shake or flip the whole badge (NB if any hexpansions are plugged in, 'Shake' and 'Flip' are disabled. There was... an incident during testing).</p>
+            <p class="hexp-desc">The trusty old 2024 Tildagon. Press any of the six buttons around the edge - each shown as the arrow pointing at it - or shake or flip the whole badge (NB if any hexpansions are plugged in, 'Shake' and 'Flip' are disabled. There was... an incident during testing).</p>
             <div class="cmd-chips">
                 <span class="cmd-chip" title="Button a">↑</span>
                 <span class="cmd-chip" title="Button b">↗</span>
