@@ -33,6 +33,15 @@ BUTTON_ARROW_NAMES = {
 class Tildagon2024Module(HexpansionModule):
     COMMAND_OPTIONS = ["flip", "a", "b", "c", "d", "e", "f", "shake"]
 
+    # Firmware button group for events from this frontboard, and the PID(s)
+    # detect_frontboard() reports for it. Subclassed per board year.
+    BUTTON_GROUP = "TwentyTwentyFour"
+    FRONTBOARD_PIDS = (0x2400,)
+
+    # Button name -> command token, for inputs whose event name isn't the
+    # command itself (the face buttons a-f map 1:1 so need no entry here).
+    BUTTON_COMMANDS = {}
+
     @classmethod
     def friendly_name(cls):
         return "Tildagon 2024"
@@ -58,7 +67,7 @@ class Tildagon2024Module(HexpansionModule):
 
     def is_connected(self, hexpansions):
         self._has_hexpansions = len(hexpansions) > 0
-        return (detect_frontboard()) == 0x2400
+        return detect_frontboard() in self.FRONTBOARD_PIDS
 
     def _safe_commands(self):
         if self._has_hexpansions:
@@ -93,7 +102,7 @@ class Tildagon2024Module(HexpansionModule):
             return
         if self.current_command == "shake":
             return
-        if button_name == self.current_command:
+        if self.BUTTON_COMMANDS.get(button_name, button_name) == self.current_command:
             self.last_status = CommandStatus.PASSED
 
     def check_command(self):
@@ -139,7 +148,7 @@ class Tildagon2024Module(HexpansionModule):
         if button is None:
             return None
         # Button has to be from us
-        if button.group != "TwentyTwentyFour":
+        if button.group != self.BUTTON_GROUP:
             return None
         value = button.name
         return value.lower()
