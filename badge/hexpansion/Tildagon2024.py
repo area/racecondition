@@ -7,6 +7,7 @@ from .verbs import PRESS_VERBS, random_verb
 import imu
 
 from app_components import symbols
+from frontboards.utils import detect_frontboard
 
 # Gesture commands read as a whole phrase, not "<verb> shake".
 GESTURE_PHRASES = {
@@ -56,10 +57,8 @@ class Tildagon2024Module(HexpansionModule):
         self._flip_baseline = None
 
     def is_connected(self, hexpansions):
-        # For now, only 2024 badges exist.
-        # Frontboard.year is being added to the firmware, so use that when available.
-        self._has_hexpansions = any(v["known"] for v in hexpansions.values())
-        return True
+        self._has_hexpansions = len(hexpansions) > 0
+        return (detect_frontboard()) == 0x2400
 
     def _safe_commands(self):
         if self._has_hexpansions:

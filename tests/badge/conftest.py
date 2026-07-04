@@ -68,6 +68,10 @@ _app_components.symbols = {
     },
 }
 
+# Board detection: tests exercise the 2024 module, so report a 2024-family PID.
+_frontboards_utils = MagicMock()
+_frontboards_utils.detect_frontboard.return_value = 0x2400
+
 for _name, _stub in [
     ("machine",                   _machine),
     ("ota",                       _ota),
@@ -75,6 +79,8 @@ for _name, _stub in [
     ("imu",                       MagicMock()),
     ("tildagonos",                MagicMock()),
     ("app_components",            _app_components),
+    ("frontboards",               MagicMock()),
+    ("frontboards.utils",         _frontboards_utils),
     ("events",                    MagicMock()),
     ("events.input",              MagicMock()),
     ("system",                    MagicMock()),
