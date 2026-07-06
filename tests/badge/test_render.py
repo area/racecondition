@@ -222,7 +222,10 @@ def test_instruction_text_is_plain_green():
     t = find_text(ctx, "engage reversal")
     assert t["rgb"] == (0, 1, 0)
     assert t["font_size"] == 24
-    assert t["pos"] == (0, -4)
+    # Instruction reads first, module name below it.
+    assert t["pos"] == (0, -18)
+    m = find_text(ctx, "Flux Capacitor")
+    assert m["pos"] == (0, 8)
 
 
 def test_result_splash_holds_until_next_instruction():
@@ -306,7 +309,7 @@ def test_waiting_banner_teaches_own_colour():
 
 
 def test_lobby_draws_one_slot_per_colour():
-    from badge.render import LOBBY_DOT_R
+    from badge.render import EMPTY_SLOT_DIM, LOBBY_DOT_R
 
     ctx = draw_waiting()
     slots = [a for a in ctx.arcs if a["radius"] == LOBBY_DOT_R]
@@ -315,17 +318,18 @@ def test_lobby_draws_one_slot_per_colour():
     dot_fills = [f for f in ctx.fills if "arc" in f and f["arc"]["radius"] == LOBBY_DOT_R]
     assert len(dot_fills) == 1
     assert dot_fills[0]["rgb"] == (0.0, 0.0, 1.0)
-    empty = [a for a in slots if a["rgb"] == (0.18, 0.18, 0.18)]
+    # Empty slots show their own colour dimmed, not a flat grey.
+    empty = [a for a in slots if max(a["rgb"]) == EMPTY_SLOT_DIM]
     assert len(empty) == 4
+    assert len({a["rgb"] for a in empty}) == 4
 
 
-def test_lobby_marks_own_slot_with_white_ring():
+def test_lobby_has_no_own_slot_ring():
     from badge.render import LOBBY_DOT_R
 
     ctx = draw_waiting()
     rings = [a for a in ctx.arcs if a["radius"] == LOBBY_DOT_R + 4.5]
-    assert len(rings) == 1
-    assert rings[0]["rgb"] == (1, 1, 1)
+    assert rings == []
 
 
 class FakeFinishedSession:

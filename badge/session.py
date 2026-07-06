@@ -148,6 +148,28 @@ class GameSession:
         self.display_timeout_s = display.get("timeout_s")
         self.display_updated_ms = now_ms
 
+    def set_local_ready(self, ready):
+        # Optimistic half of the ready toggle: mirror the flag into the
+        # count and our own lobby dot so the screen reacts on the press
+        # instead of on the server's next push (which overwrites all of
+        # this with the truth).
+        self.is_ready = ready
+        self._nudge_count("ready_count", ready)
+        for player in self.players or []:
+            if player.get("colour") == self.badge_colour:
+                player["ready"] = ready
+
+    def set_local_dismissed(self, dismissed):
+        # Same optimistic mirroring for the score screen's dismiss toggle.
+        self.is_dismissed = dismissed
+        self._nudge_count("dismissed_count", dismissed)
+
+    def _nudge_count(self, attr, up):
+        count = getattr(self, attr) + (1 if up else -1)
+        if self.badge_count:
+            count = min(count, self.badge_count)
+        setattr(self, attr, max(0, count))
+
     def build_result(self, status):
         if self.expected_module is None:
             return None

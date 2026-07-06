@@ -38,6 +38,34 @@ class TestWaitingReadyToggle(unittest.TestCase):
             [{"action": "start"}, {"action": "unready"}],
         )
 
+    def test_press_optimistically_updates_count_and_own_dot(self):
+        session = self.app.session
+        session.badge_count = 3
+        session.ready_count = 1
+        session.badge_colour = "red"
+        session.players = [
+            {"colour": "red", "ready": False},
+            {"colour": "blue", "ready": True},
+        ]
+        self.app._start_round()
+        self.assertEqual(session.ready_count, 2)
+        self.assertTrue(session.players[0]["ready"])
+        self.app._start_round()
+        self.assertEqual(session.ready_count, 1)
+        self.assertFalse(session.players[0]["ready"])
+        self.assertTrue(session.players[1]["ready"])
+
+    def test_optimistic_count_stays_within_bounds(self):
+        session = self.app.session
+        session.badge_count = 2
+        session.ready_count = 2
+        self.app._start_round()
+        self.assertEqual(session.ready_count, 2)
+        session.is_ready = True
+        session.ready_count = 0
+        self.app._start_round()
+        self.assertEqual(session.ready_count, 0)
+
 
 class TestFinishedDismissToggle(unittest.TestCase):
     def setUp(self):
@@ -56,6 +84,15 @@ class TestFinishedDismissToggle(unittest.TestCase):
         self.app._dismiss_score()
         self.assertIn({"action": "undismiss"}, self.app.net.outbox)
         self.assertFalse(self.app.session.is_dismissed)
+
+    def test_press_optimistically_updates_dismissed_count(self):
+        session = self.app.session
+        session.badge_count = 3
+        session.dismissed_count = 1
+        self.app._dismiss_score()
+        self.assertEqual(session.dismissed_count, 2)
+        self.app._dismiss_score()
+        self.assertEqual(session.dismissed_count, 1)
 
     def test_offline_fallback_still_advances_locally(self):
         self.app.net.alive = False

@@ -28,8 +28,10 @@ BEAT_MS = 250     # how much of each panic second the beat state is on
 # them, and the text below stays on black. In-round it names the target;
 # in the waiting room it teaches players their own colour.
 BANNER_RADIUS = 95
-BANNER_CHORD_Y = -44  # banner's bottom edge; module name starts at -42
-BANNER_TEXT_Y = -70
+BANNER_CHORD_Y = -44  # banner's bottom edge; instruction text starts at -27
+BANNER_TEXT_Y = -62
+BANNER_LABEL_Y = -82  # "Tell" above the colour word, clear of the arc edge
+BANNER_LABEL_SIZE = 12
 
 # The waiting screen has no timer ring to stay inside, so its banner is
 # larger and sits higher: clear of the lobby's top slot (own-ring top edge
@@ -43,6 +45,9 @@ WAIT_BANNER_LABEL_Y = -94
 LOBBY_CENTER_Y = 10
 LOBBY_RADIUS = 40
 LOBBY_DOT_R = 9
+# Empty slots keep their colour but dimmed, so a missing colour is
+# still readable as "that colour hasn't joined" rather than a grey blank.
+EMPTY_SLOT_DIM = 0.4
 
 COUNT_UP_MS = 1200  # finished screen: team score ticks up from zero
 
@@ -164,7 +169,7 @@ class Renderer:
 
 	def _draw_colour_banner(self, ctx, colour_name, label=None,
 			radius=BANNER_RADIUS, chord_y=BANNER_CHORD_Y,
-			word_y=BANNER_TEXT_Y, label_y=None):
+			word_y=BANNER_TEXT_Y, label_y=None, label_size=10):
 		# Chord segment across the top in the full-brightness colour, with
 		# the colour word knocked out of it in black or white (whichever
 		# contrasts with that colour). An optional small label sits above
@@ -181,7 +186,7 @@ class Renderer:
 		else:
 			ctx.rgb(1, 1, 1)
 		if label and label_y is not None:
-			ctx.font_size = 10
+			ctx.font_size = label_size
 			ctx.move_to(0, label_y).text(label)
 		ctx.font_size = 22
 		word = colour_name[0].upper() + colour_name[1:] if colour_name else ""
@@ -284,9 +289,10 @@ class Renderer:
 
 	def _draw_lobby(self, ctx, session):
 		# One fixed slot per badge colour, arranged in a hexagon around the
-		# room number: filled dot = that badge is ready, outline = joined
-		# but not ready, faint outline = empty slot. Your own slot is
-		# ringed in white. Colour = identity, matching the LED rings.
+		# room number: filled dot = that badge is ready, bright outline =
+		# joined but not ready, dim outline in the slot's own colour =
+		# empty, so you can see which colours are still missing. Colour =
+		# identity, matching the LED rings.
 		players = {}
 		for player in session.players or []:
 			players[player.get("colour")] = player
@@ -296,24 +302,20 @@ class Renderer:
 			x = LOBBY_RADIUS * math.cos(angle)
 			y = LOBBY_CENTER_Y + LOBBY_RADIUS * math.sin(angle)
 			player = players.get(colour)
+			rgb = self._colour_rgb(colour)
 			if player is None:
-				ctx.rgb(0.18, 0.18, 0.18)
+				ctx.rgb(rgb[0] * EMPTY_SLOT_DIM, rgb[1] * EMPTY_SLOT_DIM, rgb[2] * EMPTY_SLOT_DIM)
 				ctx.line_width = 2
 				ctx.arc(x, y, LOBBY_DOT_R, 0, 2 * math.pi, False)
 				ctx.stroke()
 				continue
-			ctx.rgb(*self._colour_rgb(colour))
+			ctx.rgb(*rgb)
 			if player.get("ready"):
 				ctx.arc(x, y, LOBBY_DOT_R, 0, 2 * math.pi, False)
 				ctx.fill()
 			else:
 				ctx.line_width = 3
 				ctx.arc(x, y, LOBBY_DOT_R, 0, 2 * math.pi, False)
-				ctx.stroke()
-			if colour == session.badge_colour:
-				ctx.rgb(1, 1, 1)
-				ctx.line_width = 2
-				ctx.arc(x, y, LOBBY_DOT_R + 4.5, 0, 2 * math.pi, False)
 				ctx.stroke()
 		ctx.restore()
 
@@ -334,14 +336,18 @@ class Renderer:
 		# (size-independent), and that 20-char line of lobby info was ~18ms of
 		# a 50ms frame budget.
 		if session.display_target_colour:
-			self._draw_colour_banner(ctx, session.display_target_colour)
+			self._draw_colour_banner(
+				ctx, session.display_target_colour,
+				label="Tell", label_y=BANNER_LABEL_Y,
+				label_size=BANNER_LABEL_SIZE,
+			)
 
 		frac = self._instruction_fraction()
 
 		ctx.rgb(0, 1, 0)
 		ctx.font_size = 24
-		ctx.move_to(0, -30).text(session.display_module_name or "")
-		ctx.move_to(0, -4).text(session.display_instruction or "...")
+		ctx.move_to(0, -18).text(session.display_instruction or "...")
+		ctx.move_to(0, 8).text(session.display_module_name or "")
 
 		if frac is not None:
 			self._draw_instruction_ring(ctx, frac)
