@@ -1,34 +1,135 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Badge Name</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Badge Name - Race Condition</title>
+<meta name="robots" content="noindex">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
 <style>
-body{font-family:sans-serif;max-width:400px;margin:40px auto;padding:0 20px;text-align:center;background:#111;color:#eee}
-h2{color:#4f4}
-input{width:100%;padding:12px;font-size:20px;box-sizing:border-box;margin:10px 0;border:2px solid #555;border-radius:8px;background:#222;color:#eee}
-button{width:100%;padding:14px;font-size:18px;background:#2a2;color:#fff;border:none;border-radius:8px;cursor:pointer;margin-top:4px}
-#clear{background:#555}
-#msg{margin-top:16px;font-size:18px;color:#4f4}
+    .page {
+        max-width: 420px;
+        margin: 0 auto;
+        padding: 52px 24px 72px;
+    }
+    h1 {
+        margin: 0 0 8px;
+        font-family: "Space Mono", monospace;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--silk);
+    }
+    .lead {
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--silk-mid);
+        margin: 0 0 28px;
+    }
+    .name-card {
+        background: var(--surface);
+        border: 1px solid var(--trace);
+        border-radius: 4px;
+        padding: 22px;
+    }
+    input {
+        width: 100%;
+        padding: 12px 14px;
+        font-size: 18px;
+        font-family: "IBM Plex Mono", monospace;
+        background: var(--bg);
+        border: 1px solid var(--trace);
+        border-radius: 3px;
+        color: var(--silk);
+        margin-bottom: 12px;
+    }
+    input::placeholder { color: var(--silk-dim); }
+    input:focus {
+        outline: none;
+        border-color: var(--copper);
+        box-shadow: 0 0 0 2px rgba(200, 121, 58, 0.2);
+    }
+    button {
+        width: 100%;
+        padding: 12px;
+        font-size: 13px;
+        font-weight: 700;
+        font-family: "Space Mono", monospace;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+    }
+    #save {
+        background: var(--copper);
+        border: 1px solid var(--copper);
+        color: var(--bg);
+    }
+    #save:hover { background: #d98a48; }
+    #clear {
+        margin-top: 8px;
+        background: transparent;
+        border: 1px solid var(--trace);
+        color: var(--silk-dim);
+    }
+    #clear:hover { color: var(--silk-mid); background: rgba(200, 230, 180, 0.05); }
+    #msg {
+        margin-top: 14px;
+        font-size: 14px;
+        font-family: "IBM Plex Mono", monospace;
+        min-height: 1.4em;
+    }
+    #msg.ok { color: var(--led-green); }
+    #msg.err { color: var(--led-red); }
+    #site-link {
+        margin-top: 28px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--silk-dim);
+    }
+    #site-link a { color: var(--copper); text-decoration: none; }
+    #site-link a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
-<h2>Set your badge name for Race Condition</h2>
-<input type="text" id="name" maxlength="16" placeholder="Your name" autocomplete="off" autocorrect="off" spellcheck="false">
-<button onclick="register(document.getElementById('name').value.trim())">Save</button>
-<button id="clear" onclick="register('')">Use auto-generated name</button>
-<div id="msg"></div>
+
+<nav>
+    <a class="nav-brand" href="/">Race Condition</a>
+    <a class="nav-back" href="/">← Main site</a>
+</nav>
+
+<div class="page">
+    <h1>Set your badge name</h1>
+    <p class="lead">Pick the name your badge shows in-game and on the leaderboard.</p>
+    <div class="name-card">
+        <input type="text" id="name" maxlength="16" placeholder="Your name" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button id="save" onclick="register(document.getElementById('name').value.trim())">Save</button>
+        <button id="clear" onclick="register('')">Use auto-generated name</button>
+        <div id="msg"></div>
+    </div>
+    <p id="site-link">This name shows up in-game and on the <a href="/#leaderboard">leaderboard</a>.<br>Live rooms, stats and how to play: <a href="/">racecondition.area.io</a></p>
+</div>
+
 <script>
 var secret_id=location.pathname.split('/').pop();
 function register(name){
   fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret_id:secret_id,username:name})})
   .then(function(r){return r.json();})
   .then(function(d){
+    var msg=document.getElementById('msg');
     if(d.ok){
       document.getElementById('name').value=name;
-      document.getElementById('msg').textContent='✓ Name set to: '+d.username;
-    }else{document.getElementById('msg').textContent='Error: '+(d.error||'unknown');}
+      msg.className='ok';
+      msg.textContent='✓ Name set to: '+d.username;
+    }else{
+      msg.className='err';
+      msg.textContent='Error: '+(d.error||'unknown');
+    }
   });
 }
 document.getElementById('name').addEventListener('keydown',function(e){if(e.key==='Enter')register(document.getElementById('name').value.trim());});
