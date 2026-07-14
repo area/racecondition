@@ -4,13 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import badge.app as _app_module
 from badge.app import RaceConditionApp, CANCEL_HOLD_MS
+from events.input import Button, BUTTON_TYPES
 
 
 def _make_cancel_event():
-    """A ButtonDownEvent/ButtonUpEvent whose button is the cancel button."""
-    button = MagicMock()
-    button.name = "cancel"
-    button.parent = None
+    """A ButtonDownEvent/ButtonUpEvent carrying the physical cancel button,
+    shaped like the firmware builds it (logical CANCEL in its parents)."""
+    button = Button("F", "TwentyTwentyFour",
+                    [BUTTON_TYPES["CANCEL"], Button("F", "Frontboard")])
     event = MagicMock()
     event.button = button
     return event

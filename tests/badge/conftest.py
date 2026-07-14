@@ -50,6 +50,96 @@ _ota.get_version.return_value = "v2.0.0"
 _settings = MagicMock()
 _settings.get.side_effect = lambda key, default=None: default
 
+# events.input is stubbed with a faithful mini-implementation rather than a
+# MagicMock: is_cancel() depends on Button's ancestry semantics (__contains__
+# walking the parents chain), and a MagicMock stub is exactly how the
+# parent -> parents firmware change (tildagonOS 8aa7bd8) slipped past the
+# suite. Mirrors modules/events/input.py at firmware HEAD; __slots__ omitted
+# because MicroPython ignores it anyway. test_buttons.py diffs this stub
+# against the real firmware source when a checkout is available.
+
+class _Button:
+    def __init__(self, name, group, parent=None):
+        self.name = name
+        self.group = group
+        if isinstance(parent, _Button):
+            self.parents = [parent]
+        elif parent is None:
+            self.parents = []
+        else:
+            self.parents = parent
+        self._all_parents = None
+
+    def __hash__(self):
+        return hash((self.name, self.group))
+
+    def __repr__(self):
+        return "Button({}.{})".format(self.group, self.name)
+
+    def __eq__(self, other):
+        return self.name == other.name and self.group == other.group
+
+    @property
+    def all_parents(self):
+        if self._all_parents is None:
+            self._all_parents = []
+            for parent in self.parents:
+                self._all_parents.append(parent)
+                self._all_parents += parent.all_parents
+        return self._all_parents
+
+    def __contains__(self, other):
+        if other == self:
+            return True
+        for parent in self.all_parents:
+            if other == parent:
+                return True
+        return False
+
+    def find_parent_in_group(self, group):
+        if self.group == group:
+            return self
+        for parent in self.all_parents:
+            if parent.group == group:
+                return parent
+        return None
+
+
+_BUTTON_TYPES = {
+    name: _Button(name, "System")
+    for name in ("UNDEFINED", "CANCEL", "CONFIRM", "UP", "DOWN", "LEFT", "RIGHT")
+}
+
+
+class _Buttons:
+    """State-tracking half of firmware Buttons, minus the eventbus wiring."""
+    def __init__(self, app):
+        self.buttons = {}
+
+    def get(self, button, default=None):
+        matching = [v for (b, v) in self.buttons.items() if b == button or button in b]
+        return any(matching)
+
+    def __getitem__(self, item):
+        return self.buttons[item]
+
+    def clear(self):
+        self.buttons.clear()
+
+
+_events_input = types.ModuleType("events.input")
+_events_input.Button = _Button
+_events_input.BUTTON_TYPES = _BUTTON_TYPES
+_events_input.Buttons = _Buttons
+_events_input.ButtonDownEvent = type("ButtonDownEvent", (), {})
+_events_input.ButtonUpEvent = type("ButtonUpEvent", (), {})
+
+# The real `events` module exposes an Event base class; the differential test
+# in test_buttons.py execs the genuine firmware input.py, which subclasses it,
+# so the stub needs a real class rather than a MagicMock attribute.
+_events = MagicMock()
+_events.Event = type("Event", (), {})
+
 # app_components is firmware-only, but decorate() reads symbols["arrows"] from it,
 # so give the mock the real arrow glyphs (mirrors app_components/tokens.py).
 _app_components = MagicMock()
@@ -81,8 +171,8 @@ for _name, _stub in [
     ("app_components",            _app_components),
     ("frontboards",               MagicMock()),
     ("frontboards.utils",         _frontboards_utils),
-    ("events",                    MagicMock()),
-    ("events.input",              MagicMock()),
+    ("events",                    _events),
+    ("events.input",              _events_input),
     ("system",                    MagicMock()),
     ("system.eventbus",           MagicMock()),
     ("system.hexpansion",         MagicMock()),

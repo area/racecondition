@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from badge.test_session import TestSession, TEST_SKIP_HOLD_MS
 from badge.hexpansion.base import CommandStatus
+from events.input import Button, BUTTON_TYPES
 
 
 def _make_module(name, commands):
@@ -16,16 +17,16 @@ def _make_module(name, commands):
 
 
 def _btn(name="a", group="TwentyTwentyFour"):
-    btn = MagicMock()
-    btn.name = name
-    btn.parent = None
     ev = MagicMock()
-    ev.button = btn
+    ev.button = Button(name, group)
     return ev
 
 
 def _cancel():
-    return _btn("cancel")
+    ev = MagicMock()
+    ev.button = Button("F", "TwentyTwentyFour",
+                       [BUTTON_TYPES["CANCEL"], Button("F", "Frontboard")])
+    return ev
 
 
 def _make_module_filtered(name, all_commands, active_commands):
