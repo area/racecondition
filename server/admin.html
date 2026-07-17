@@ -350,6 +350,19 @@
         }
         .pager-btn:disabled { opacity: 0.3; cursor: default; }
         .pager-btn:not(:disabled):hover { background: rgba(200, 230, 180, 0.05); color: var(--silk); }
+        .del-btn {
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            background: rgba(239, 68, 68, 0.08);
+            color: var(--bad);
+            border-radius: 2px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: "IBM Plex Mono", monospace;
+            transition: background 0.1s;
+        }
+        .del-btn:hover { background: rgba(239, 68, 68, 0.18); }
+        .del-btn:disabled { opacity: 0.4; cursor: default; }
     </style>
 </head>
 <body>
@@ -385,10 +398,11 @@
                     <th class="r">Passed</th>
                     <th class="r">Failed</th>
                     <th class="r">Hexpansions</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody id="games-tbody">
-                <tr><td colspan="8" class="games-empty">Loading…</td></tr>
+                <tr><td colspan="9" class="games-empty">Loading…</td></tr>
             </tbody>
         </table>
     </div>
@@ -563,7 +577,7 @@
 
         function renderPage() {
             if (!allEntries.length) {
-                gamesTbody.innerHTML = '<tr><td colspan="8" class="games-empty">No games yet</td></tr>';
+                gamesTbody.innerHTML = '<tr><td colspan="9" class="games-empty">No games yet</td></tr>';
                 gamesCount.textContent = "";
                 pagerInfo.textContent = "";
                 pagerPrev.disabled = true;
@@ -595,9 +609,10 @@
                         <td class="r pass-val">${e.commands_passed}</td>
                         <td class="r fail-val">${e.commands_failed}</td>
                         <td class="r">${e.total_modules}</td>
+                        <td class="r"><button class="del-btn" data-del="${e.id}">Delete</button></td>
                     </tr>
                     <tr class="detail-row">
-                        <td colspan="8"><div class="detail-inner" id="${id}">
+                        <td colspan="9"><div class="detail-inner" id="${id}">
                             <div class="detail-body">${badgeCards(e, allUsernames)}</div>
                             ${moduleResultsSection(e)}
                         </div></td>
@@ -617,6 +632,25 @@
                     inner.classList.toggle("open", !isOpen);
                     row.classList.toggle("open", !isOpen);
                     if (isOpen) openRows.delete(idx); else openRows.add(idx);
+                });
+            });
+
+            gamesTbody.querySelectorAll(".del-btn").forEach(btn => {
+                btn.addEventListener("click", async (ev) => {
+                    // Don't let the click bubble to the summary row (which would
+                    // toggle its detail panel).
+                    ev.stopPropagation();
+                    const id = btn.dataset.del;
+                    if (!confirm("Delete this game permanently? It will be removed from all stats.")) return;
+                    btn.disabled = true;
+                    try {
+                        const resp = await fetch(`/api/admin/games/${id}`, { method: "DELETE" });
+                        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                        await refreshGames();
+                    } catch (err) {
+                        btn.disabled = false;
+                        alert(`Delete failed: ${err}`);
+                    }
                 });
             });
         }

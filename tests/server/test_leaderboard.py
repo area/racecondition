@@ -138,6 +138,20 @@ class TestSqliteLeaderboardStats(unittest.TestCase):
         # abc, def, ghi, xyz — 4 distinct badge_ids in game_badge_scores
         self.assertEqual(result["distinct_badges_seen"], 4)
 
+    def test_worst_hexpansion_picks_zero_success_module(self):
+        # A module that never passes has success_rate 0.0, which is falsy — it
+        # must still rank as the worst, not be skipped for a better module.
+        entry = dict(
+            _ENTRY_A,
+            module_scores={"MegaDrive": {"passed": 0, "failed": 1}, "Tildagon2024": {"passed": 4, "failed": 1}},
+            badge_scores={},
+        )
+        self.lb.record(entry)
+        result = self.lb.stats()
+        self.assertEqual(result["module_stats"]["MegaDrive"]["success_rate"], 0.0)
+        self.assertEqual(result["worst_hexpansion"], "MegaDrive")
+        self.assertEqual(result["best_hexpansion"], "Tildagon2024")
+
     def test_stats_no_module_data_omits_module_stats(self):
         entry = dict(_ENTRY_A, module_scores={}, badge_scores={})
         self.lb.record(entry)
@@ -152,6 +166,51 @@ class TestSqliteLeaderboardStats(unittest.TestCase):
         result = self.lb.stats()
         self.assertEqual(result["total_games"], 1)
         self.assertEqual(result["module_stats"], {})
+
+
+class TestDeleteGame(unittest.TestCase):
+    def setUp(self):
+        self.lb, self.path = _make_lb()
+
+    def tearDown(self):
+        os.unlink(self.path)
+
+    def _delete_first(self):
+        [entry] = [e for e in self.lb.entries() if e["room_id"] == 1]
+        return self.lb.delete(entry["id"])
+
+    def test_delete_removes_entry_from_history(self):
+        self.lb.record(_ENTRY_A)
+        self.lb.record(_ENTRY_B)
+        self.assertTrue(self._delete_first())
+        rooms = {e["room_id"] for e in self.lb.entries()}
+        self.assertEqual(rooms, {2})
+
+    def test_delete_returns_false_for_unknown_id(self):
+        self.lb.record(_ENTRY_A)
+        self.assertFalse(self.lb.delete(9999))
+        self.assertEqual(self.lb.stats()["total_games"], 1)
+
+    def test_delete_excludes_game_from_overall_stats(self):
+        self.lb.record(_ENTRY_A)
+        self.lb.record(_ENTRY_B)
+        self._delete_first()
+        result = self.lb.stats()
+        # Only ENTRY_B remains: 1 game, its score, its single badge.
+        self.assertEqual(result["total_games"], 1)
+        self.assertAlmostEqual(result["avg_score"], 20.0, places=1)
+        self.assertEqual(result["distinct_badges_seen"], 1)
+
+    def test_delete_excludes_game_from_hexpansion_stats(self):
+        self.lb.record(_ENTRY_A)
+        self.lb.record(_ENTRY_B)
+        self._delete_first()
+        gps = self.lb.stats()["module_stats"]["GPS"]
+        # ENTRY_A's GPS 5/1 is gone; only ENTRY_B's GPS 3/7 remains.
+        self.assertEqual(gps["passed"], 3)
+        self.assertEqual(gps["failed"], 7)
+        # BLING existed only in ENTRY_A, so it disappears entirely.
+        self.assertNotIn("BLING", self.lb.stats()["module_stats"])
 
 
 

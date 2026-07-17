@@ -294,6 +294,20 @@ async def api_stats(request):
     return web.json_response(leaderboard.stats())
 
 
+async def delete_game(request):
+    if not _check_admin_auth(request):
+        return _admin_unauthorized()
+    global _leaderboard_cache
+    entry_id = int(request.match_info["entry_id"])
+    removed = leaderboard.delete(entry_id)
+    if not removed:
+        return web.json_response({"error": "Unknown game"}, status=404)
+    # The cached top-N payload may still name this game; drop it so the next
+    # fetch rebuilds from the now-smaller table.
+    _leaderboard_cache = None
+    return web.json_response({"ok": True})
+
+
 async def register(request):
     try:
         payload = await request.json()
@@ -500,6 +514,7 @@ def build_app():
         web.post("/api/register", register),
         web.post("/api/rooms/create", create_room),
         web.post(r"/api/rooms/{room_id:\d+}/hurry", hurry),
+        web.delete(r"/api/admin/games/{entry_id:\d+}", delete_game),
     ])
     return app
 
