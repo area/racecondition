@@ -42,6 +42,22 @@ class SqliteLeaderboard:
                 )
             self._conn.commit()
 
+    def delete(self, entry_id):
+        """Permanently remove a game and everything derived from it.
+
+        Overall stats, per-hexpansion stats and the leaderboard are all
+        computed live from these three tables, so dropping the entry and its
+        child rows erases the game from every view. Returns True if a game was
+        actually removed. The child deletes come first because foreign_keys=ON
+        would otherwise reject removing a still-referenced parent row.
+        """
+        with self._lock:
+            self._conn.execute("DELETE FROM game_module_results WHERE entry_id = ?", (entry_id,))
+            self._conn.execute("DELETE FROM game_badge_scores WHERE entry_id = ?", (entry_id,))
+            cur = self._conn.execute("DELETE FROM leaderboard_entries WHERE id = ?", (entry_id,))
+            self._conn.commit()
+            return cur.rowcount > 0
+
     def rank_of_score(self, score):
         """(rank, total_games) for a just-recorded score, last 24 hours.
 
@@ -91,6 +107,7 @@ class SqliteLeaderboard:
 
         return [
             {
+                "id": row[0],
                 "timestamp": row[1],
                 "room_id": row[2],
                 "score": row[3],
@@ -151,8 +168,13 @@ class SqliteLeaderboard:
                 "success_rate": round(passed / total, 3) if total else None,
             }
 
-        best = max(module_stats, key=lambda m: module_stats[m]["success_rate"] or 0) if module_stats else None
-        worst = min(module_stats, key=lambda m: module_stats[m]["success_rate"] or 1) if module_stats else None
+        # Rank only modules with at least one attempt. success_rate is None
+        # when a module was never issued (total == 0); such modules have no
+        # meaningful rate and are excluded rather than defaulted — a real 0.0
+        # (all failed) is falsy but must still count as the worst.
+        rated = {m: s["success_rate"] for m, s in module_stats.items() if s["success_rate"] is not None}
+        best = max(rated, key=rated.get) if rated else None
+        worst = min(rated, key=rated.get) if rated else None
         busiest = max(module_stats, key=lambda m: module_stats[m]["passed"] + module_stats[m]["failed"]) if module_stats else None
 
         total_commands_passed = agg[6] or 0
