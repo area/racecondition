@@ -11,7 +11,9 @@ from badge.hexpansion.MegaDrive import (
     COMBO_STEP_MS,
 )
 from badge.hexpansion.GPS import GPSModule, _distance_m, TARGET_DISTANCE_M
+from badge.hexpansion.Keyboard import KeyboardModule, WORDS
 from badge.hexpansion.Tildagon2024 import Tildagon2024Module
+from badge.hexpansion.Tildagon2026 import Tildagon2026Module
 
 
 # ── Fake button event helpers ─────────────────────────────────────────────────
@@ -31,6 +33,9 @@ def _sega(name):
 
 def _ttt(name):
     return _BtnEvent(name, "TwentyTwentyFour")
+
+def _tts(name):
+    return _BtnEvent(name, "TwentyTwentySix")
 
 
 def _perform_combo(m, tokens, held=None):
@@ -365,6 +370,209 @@ class TestTildagon2024Module(unittest.TestCase):
         _imu.acc_read.return_value = (0.0, 0.0, 9.8)  # no change
         # No client-side timeout — stays WAITING until server expires it
         self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+
+# ── Keyboard (keepdeck) ───────────────────────────────────────────────────────
+
+def _key(name):
+    return _BtnEvent(name, "Keyboard")
+
+
+@unittest.skip("KeyboardModule disabled (not in MODULE_TYPES)")
+class TestKeyboardModule(unittest.TestCase):
+    def setUp(self):
+        self.m = KeyboardModule()
+        self.m.set_command("pause")
+
+    def _type(self, text):
+        for ch in text:
+            self.m.on_button_down(_key("SPACE" if ch == " " else ch.upper()))
+
+    def test_typing_each_word_passes(self):
+        for word in WORDS:
+            m = KeyboardModule()
+            m.set_command(word)
+            for ch in word:
+                m.on_button_down(_key(ch.upper()))
+            self.assertEqual(m.check_command(), CommandStatus.PASSED, msg=word)
+
+    def test_wrong_homophone_stays_waiting(self):
+        self._type("paws")
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_partial_word_stays_waiting(self):
+        self._type("paus")
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_backspace_fixes_a_typo(self):
+        self._type("pauze")
+        self.m.on_button_down(_key("BACKSPACE"))
+        self.m.on_button_down(_key("BACKSPACE"))
+        self._type("se")
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_earlier_junk_is_forgiven(self):
+        # A failed attempt followed by the full word still passes.
+        self._type("pawspause")
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_junk_mid_word_breaks_the_match(self):
+        self._type("pau!se")
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_space_breaks_the_match(self):
+        self._type("pau se")
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_modifier_keys_do_not_type(self):
+        self._type("paus")
+        for name in ("SHIFT", "ENTER", "UP", "ESCAPE"):
+            self.m.on_button_down(_key(name))
+        self._type("e")
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_keys_from_other_groups_ignored(self):
+        for ch in "pause":
+            self.m.on_button_down(_ttt(ch.upper()))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_set_command_clears_typed_buffer(self):
+        self._type("pause")
+        self.m.set_command("paws")
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        self._type("paws")
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_buffer_stays_bounded(self):
+        self._type("x" * 200)
+        self.assertLessEqual(len(self.m._typed), 32)
+        self._type("pause")
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_no_word_contains_another(self):
+        # The ends-with matcher relies on this property of the word list.
+        for a in WORDS:
+            for b in WORDS:
+                if a != b:
+                    self.assertNotIn(a, b)
+
+    def test_capabilities_lists_all_words(self):
+        self.assertEqual(self.m.get_capabilities()["commands"], list(WORDS))
+
+    def test_decorate_quotes_the_word(self):
+        phrase = decorate_command("keepdeck", "pours")
+        self.assertIn('"pours"', phrase)
+
+
+# ── Tildagon2026 ──────────────────────────────────────────────────────────────
+
+class TestTildagon2026Module(unittest.TestCase):
+    def setUp(self):
+        import imu as _imu
+        _imu.acc_read.return_value = (0.0, 0.0, 9.8)
+        self.m = Tildagon2026Module()
+
+    def test_connected_on_2026_pids(self):
+        # conftest reports a 2024 board, so the 2026 module is disconnected...
+        self.assertFalse(self.m.is_connected({}))
+        # ...and connected on either Spaceagon revision.
+        for pid in (0x2600, 0x2601):
+            with patch("badge.hexpansion.Tildagon2024.detect_frontboard", return_value=pid):
+                self.assertTrue(self.m.is_connected({}), msg=hex(pid))
+
+    def test_2024_module_not_connected_on_2026_board(self):
+        with patch("badge.hexpansion.Tildagon2024.detect_frontboard", return_value=0x2600):
+            self.assertFalse(Tildagon2024Module().is_connected({}))
+
+    def test_face_button_passes(self):
+        self.m.set_command("a")
+        self.m.on_button_down(_tts("A"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_button_from_2024_group_ignored(self):
+        self.m.set_command("a")
+        self.m.on_button_down(_ttt("A"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_joystick_direction_passes(self):
+        self.m.set_command("joy_up")
+        self.m.on_button_down(_tts("JOYUP"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_joystick_wrong_direction_stays_waiting(self):
+        self.m.set_command("joy_up")
+        self.m.on_button_down(_tts("JOYDOWN"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_fire_maps_to_joystick_button(self):
+        self.m.set_command("fire")
+        self.m.on_button_down(_tts("JOYFIRE"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_proximity_commands_removed(self):
+        # The left/right proximity ("wave") commands are gone entirely.
+        self.assertNotIn("wave_left", self.m.COMMAND_OPTIONS)
+        self.assertNotIn("wave_right", self.m.COMMAND_OPTIONS)
+
+    def test_pads_are_planet_commands(self):
+        # Commands are keyed by body, not pad number. All twelve distinct bodies
+        # are present; pad numbers are not.
+        for planet in ("neptune", "sol", "voyager", "asteroid_belt", "kuiper_belt", "mars"):
+            self.assertIn(planet, self.m.COMMAND_OPTIONS)
+        self.assertNotIn("touch05", self.m.COMMAND_OPTIONS)
+
+    def test_specific_planet_pad_passes(self):
+        # Firmware pads are zero-padded (TOUCH05 -> touch05); touch05 is Neptune.
+        self.m.set_command("neptune")
+        self.m.on_button_down(_tts("TOUCH05"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_wrong_planet_pad_stays_waiting(self):
+        # Pads are distinguishable: Voyager's pad must not satisfy Neptune.
+        self.m.set_command("neptune")
+        self.m.on_button_down(_tts("TOUCH07"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_belts_are_distinct_pads(self):
+        # touch01 is the asteroid belt, touch06 the Kuiper belt — not the same.
+        self.m.set_command("kuiper_belt")
+        self.m.on_button_down(_tts("TOUCH01"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        self.m.on_button_down(_tts("TOUCH06"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_touch_pad_does_not_satisfy_other_commands(self):
+        self.m.set_command("a")
+        self.m.on_button_down(_tts("TOUCH01"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_inherited_shake_passes_on_large_delta(self):
+        import imu as _imu
+        self.m.set_command("shake")
+        self.m.check_command()  # stores _last_accel
+        _imu.acc_read.return_value = (20.0, 20.0, 20.0)
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
+
+    def test_capabilities_excludes_gestures_when_hexpansions_present(self):
+        with patch("badge.hexpansion.Tildagon2024.detect_frontboard", return_value=0x2600):
+            self.m.is_connected({1: {"known": True, "name": "GPS"}})
+        commands = self.m.get_capabilities()["commands"]
+        self.assertNotIn("shake", commands)
+        self.assertNotIn("flip", commands)
+        self.assertIn("joy_up", commands)
+
+    def test_decorate_joystick_shows_arrow(self):
+        self.assertTrue(decorate_command("Tildagon 2026", "joy_up").endswith("↑"))
+
+    def test_decorate_fire(self):
+        self.assertTrue(decorate_command("Tildagon 2026", "fire").endswith("FIRE"))
+
+    def test_decorate_face_button_falls_back_to_2024_arrows(self):
+        self.assertTrue(decorate_command("Tildagon 2026", "b").endswith("↗"))
+
+    def test_decorate_touch_pad_shows_planet(self):
+        self.assertTrue(decorate_command("Tildagon 2026", "neptune").endswith("Neptune"))
+        self.assertTrue(decorate_command("Tildagon 2026", "asteroid_belt").endswith("the asteroid belt"))
 
 
 if __name__ == "__main__":

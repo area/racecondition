@@ -1,13 +1,17 @@
 from .base import CommandStatus
 from .MegaDrive import MegaDriveModule
 from .GPS import GPSModule
+from .Keyboard import KeyboardModule
 from .Tildagon2024 import Tildagon2024Module
+from .Tildagon2026 import Tildagon2026Module
 
 
 MODULE_TYPES = [
 	Tildagon2024Module,
+	Tildagon2026Module,
 	MegaDriveModule,
 	GPSModule,
+	# KeyboardModule,
 ]
 
 

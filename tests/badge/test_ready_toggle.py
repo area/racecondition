@@ -1,9 +1,11 @@
-"""Any button toggles readiness on the waiting and finished screens."""
+"""Any physical button toggles readiness on the waiting and finished screens;
+the 2026 touch pads (same ButtonDown group) do not."""
 
 import unittest
 from unittest.mock import MagicMock, patch
 
 from badge.app import RaceConditionApp
+from events.input import Button, BUTTON_TYPES
 
 
 def _make_app():
@@ -11,6 +13,22 @@ def _make_app():
         a = RaceConditionApp(room_client=MagicMock())
         a._finish_init()
         return a
+
+
+def _physical_event(name="A"):
+    # Shaped like the firmware builds a face/joystick button: a logical
+    # BUTTON_TYPES direction sits in its ancestry.
+    event = MagicMock()
+    event.button = Button(name, "TwentyTwentySix",
+                          [BUTTON_TYPES["UP"], Button(name, "Frontboard")])
+    return event
+
+
+def _touch_pad_event(name="TOUCH05"):
+    # Firmware builds touch pads with no logical parent (frontboards/twentysix.py).
+    event = MagicMock()
+    event.button = Button(name, "TwentyTwentySix")
+    return event
 
 
 class TestWaitingReadyToggle(unittest.TestCase):
@@ -98,4 +116,40 @@ class TestFinishedDismissToggle(unittest.TestCase):
         self.app.net.alive = False
         self.app._dismiss_score()
         self.assertEqual(self.app.session.room_state, "waiting")
+        self.assertEqual(self.app.net.outbox, [])
+
+
+class TestReadyOnlyPhysicalButtons(unittest.TestCase):
+    """Touch pads must not ready or dismiss, even though they arrive as
+    ButtonDown events in the same group as the physical buttons."""
+
+    def setUp(self):
+        self.app = _make_app()
+        self.app.session.start_room(1)
+        self.app.session.set_room_state("waiting")
+
+    def test_face_button_readies(self):
+        self.app._on_button_down(_physical_event("A"))
+        self.assertTrue(self.app.session.is_ready)
+        self.assertIn({"action": "start"}, self.app.net.outbox)
+
+    def test_joystick_readies(self):
+        self.app._on_button_down(_physical_event("JOYUP"))
+        self.assertTrue(self.app.session.is_ready)
+
+    def test_touch_pad_does_not_ready(self):
+        self.app._on_button_down(_touch_pad_event("TOUCH05"))
+        self.assertFalse(self.app.session.is_ready)
+        self.assertEqual(self.app.net.outbox, [])
+
+    def test_face_button_dismisses_finished_score(self):
+        self.app.net.alive = True
+        self.app.session.set_room_state("finished")
+        self.app._on_button_down(_physical_event("A"))
+        self.assertIn({"action": "dismiss"}, self.app.net.outbox)
+
+    def test_touch_pad_does_not_dismiss_finished_score(self):
+        self.app.net.alive = True
+        self.app.session.set_room_state("finished")
+        self.app._on_button_down(_touch_pad_event("TOUCH05"))
         self.assertEqual(self.app.net.outbox, [])

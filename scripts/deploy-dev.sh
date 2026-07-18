@@ -84,7 +84,11 @@ EOF
 
 # Best-effort: also mark the in-app title screen. Harmless no-op if the line
 # in badge/app.py changes shape.
-sed -i 's/text("Race Condition")/text("Race Condition (dev)")/' "$PAYLOAD/badge/app.py"
+# Note: sed -i is not portable (GNU wants -i, BSD/macOS wants -i ''), so route
+# through a temp file instead.
+_app_py="$PAYLOAD/badge/app.py"
+_tmp="$(mktemp)"
+sed 's/text("Race Condition")/text("Race Condition (dev)")/' "$_app_py" >"$_tmp" && mv "$_tmp" "$_app_py"
 
 # ── Install ───────────────────────────────────────────────────────────────────
 info "Preparing /apps/$DEST on the badge (removes any previous dev copy)"
