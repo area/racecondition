@@ -4,7 +4,7 @@ import time
 
 DEFAULT_SERVER_URL = "https://racecondition.area.io"
 # DEFAULT_SERVER_URL = "http://archaix.lan:8000"
-REQUEST_TIMEOUT_SECONDS = 20
+REQUEST_TIMEOUT_SECONDS = 5
 
 # The badge's network stack raises OSError with negative lwIP/mbedtls codes (and
 # a few positive POSIX errnos) that str() out as bare numbers — "Create failed:
