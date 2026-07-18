@@ -11,7 +11,7 @@ MODULE_TYPES = [
 	Tildagon2026Module,
 	MegaDriveModule,
 	GPSModule,
-	KeyboardModule,
+	# KeyboardModule,
 ]
 
 

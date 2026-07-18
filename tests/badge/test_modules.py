@@ -508,23 +508,41 @@ class TestTildagon2026Module(unittest.TestCase):
         self.m.on_button_down(_tts("JOYFIRE"))
         self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
 
-    def test_wave_maps_to_prox_sensor(self):
-        self.m.set_command("wave_left")
-        self.m.on_button_down(_tts("RIGHTPROX"))
-        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
-        self.m.on_button_down(_tts("LEFTPROX"))
+    def test_proximity_commands_removed(self):
+        # The left/right proximity ("wave") commands are gone entirely.
+        self.assertNotIn("wave_left", self.m.COMMAND_OPTIONS)
+        self.assertNotIn("wave_right", self.m.COMMAND_OPTIONS)
+
+    def test_pads_are_planet_commands(self):
+        # Commands are keyed by body, not pad number. All twelve distinct bodies
+        # are present; pad numbers are not.
+        for planet in ("neptune", "sol", "voyager", "asteroid_belt", "kuiper_belt", "mars"):
+            self.assertIn(planet, self.m.COMMAND_OPTIONS)
+        self.assertNotIn("touch05", self.m.COMMAND_OPTIONS)
+
+    def test_specific_planet_pad_passes(self):
+        # Firmware pads are zero-padded (TOUCH05 -> touch05); touch05 is Neptune.
+        self.m.set_command("neptune")
+        self.m.on_button_down(_tts("TOUCH05"))
         self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
 
-    def test_any_touch_pad_satisfies_touch(self):
-        for pad in ("TOUCH1", "TOUCH7", "TOUCH12"):
-            m = Tildagon2026Module()
-            m.set_command("touch")
-            m.on_button_down(_tts(pad))
-            self.assertEqual(m.check_command(), CommandStatus.PASSED, msg=pad)
+    def test_wrong_planet_pad_stays_waiting(self):
+        # Pads are distinguishable: Voyager's pad must not satisfy Neptune.
+        self.m.set_command("neptune")
+        self.m.on_button_down(_tts("TOUCH07"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+
+    def test_belts_are_distinct_pads(self):
+        # touch01 is the asteroid belt, touch06 the Kuiper belt — not the same.
+        self.m.set_command("kuiper_belt")
+        self.m.on_button_down(_tts("TOUCH01"))
+        self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
+        self.m.on_button_down(_tts("TOUCH06"))
+        self.assertEqual(self.m.check_command(), CommandStatus.PASSED)
 
     def test_touch_pad_does_not_satisfy_other_commands(self):
         self.m.set_command("a")
-        self.m.on_button_down(_tts("TOUCH1"))
+        self.m.on_button_down(_tts("TOUCH01"))
         self.assertEqual(self.m.check_command(), CommandStatus.WAITING)
 
     def test_inherited_shake_passes_on_large_delta(self):
@@ -551,9 +569,9 @@ class TestTildagon2026Module(unittest.TestCase):
     def test_decorate_face_button_falls_back_to_2024_arrows(self):
         self.assertTrue(decorate_command("Tildagon 2026", "b").endswith("↗"))
 
-    def test_decorate_touch_is_a_phrase(self):
-        self.assertIn(decorate_command("Tildagon 2026", "touch"),
-                      ("Touch a pad", "Tap any touch pad"))
+    def test_decorate_touch_pad_shows_planet(self):
+        self.assertTrue(decorate_command("Tildagon 2026", "neptune").endswith("Neptune"))
+        self.assertTrue(decorate_command("Tildagon 2026", "asteroid_belt").endswith("the asteroid belt"))
 
 
 if __name__ == "__main__":

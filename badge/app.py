@@ -14,7 +14,7 @@ from system.hexpansion.util import read_hexpansion_header, detect_eeprom_addr
 from system.patterndisplay.events import PatternDisable
 from tildagonos import tildagonos
 
-from .buttons import is_cancel
+from .buttons import is_cancel, is_physical_button
 from .hexpansion_names import get_friendly_name
 from .constants import BADGE_COLOURS, CANCEL_HOLD_MS
 from .identity import build_secret_id, derive_public_id
@@ -132,10 +132,18 @@ class RaceConditionApp(app.App):
 			return
 
 		if self.session.room_state == "waiting":
-			self._start_round()
+			# Readying is a lobby action: only a real button press counts, so a
+			# stray 2026 touch pad (same ButtonDown group) can't ready a player.
+			if is_physical_button(event):
+				self._start_round()
 		elif self.session.room_state == "finished":
-			self._dismiss_score()
+			# Same for dismissing a finished score — it's the lobby-ready toggle
+			# under another name, so touch pads shouldn't trigger it either.
+			if is_physical_button(event):
+				self._dismiss_score()
 		elif self.session.in_round and self.session.expected_module:
+			# In-round, touch pads are real inputs (the planet commands), so the
+			# module sees every event.
 			self.session.expected_module.on_button_down(event)
 
 	def _on_button_up(self, event):
@@ -194,10 +202,18 @@ class RaceConditionApp(app.App):
 			self.minimise()
 
 	def _show_join_menu(self):
-		if self.room_client.available():
-			data, _ = self.room_client.list_rooms()
-			if data:
-				self._room_list = data.get("rooms", [])
+		if not self.room_client.available():
+			self.notification = Notification("No network")
+			return
+		if not self.room_client.wifi_ready():
+			self.notification = Notification("Wi-Fi not connected")
+			return
+		data, error = self.room_client.list_rooms()
+		if error:
+			self.notification = Notification("List failed: {}".format(error))
+			return
+		if data:
+			self._room_list = data.get("rooms", [])
 		if not self._room_list:
 			self.notification = Notification("No rooms open")
 			return
@@ -231,6 +247,10 @@ class RaceConditionApp(app.App):
 	def _do_create_room(self):
 		if not self.room_client.available():
 			self.notification = Notification("No network")
+			self._ensure_menu()
+			return
+		if not self.room_client.wifi_ready():
+			self.notification = Notification("Wi-Fi not connected")
 			self._ensure_menu()
 			return
 		data, error = self.room_client.create_room()

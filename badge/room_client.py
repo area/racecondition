@@ -4,7 +4,19 @@ import time
 
 DEFAULT_SERVER_URL = "https://racecondition.area.io"
 # DEFAULT_SERVER_URL = "http://archaix.lan:8000"
-REQUEST_TIMEOUT_SECONDS = 3
+REQUEST_TIMEOUT_SECONDS = 20
+
+# The badge's network stack raises OSError with negative lwIP/mbedtls codes (and
+# a few positive POSIX errnos) that str() out as bare numbers — "Create failed:
+# -202" is the classic DNS-resolution failure. Map the ones a user might
+# actually hit to words; anything else falls back to "Network error (<code>)".
+_ERRNO_MESSAGES = {
+    -202: "Can't reach server (DNS)",
+    -203: "Server unreachable",
+    116: "Connection timed out",  # ETIMEDOUT
+    104: "Connection reset",  # ECONNRESET
+    113: "No route to network",  # EHOSTUNREACH
+}
 
 
 def _make_ssl_context():
@@ -48,6 +60,20 @@ class RoomClient:
 
     def available(self):
         return self._requests is not None
+
+    def wifi_ready(self):
+        # Local, no network round-trip. wifi.status() is _STA_IF.isconnected(),
+        # which on the ESP32 is True only when associated AND holding a DHCP
+        # lease — exactly the precondition a request needs. Without this gate a
+        # badge that isn't on Wi-Fi surfaces a raw OSError(-202) (DNS) instead.
+        try:
+            import wifi
+        except ImportError:
+            return True  # sim / non-Tildagon firmware — don't block, let it try
+        try:
+            return bool(wifi.status())
+        except Exception:
+            return True  # unexpected API shape — fail open rather than lock out
 
     def ws_url(self, room_id):
         # Identity is proven by the secret_id sent in the join message body, not
@@ -119,6 +145,9 @@ class RoomClient:
             if response.status_code >= 400:
                 return None, data.get("error", "HTTP {}".format(response.status_code))
             return data, None
+        except OSError as exc:
+            code = exc.args[0] if exc.args else None
+            return None, _ERRNO_MESSAGES.get(code, "Network error ({})".format(code))
         except Exception as exc:
             return None, str(exc)
         finally:
