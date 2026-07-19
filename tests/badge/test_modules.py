@@ -378,7 +378,6 @@ def _key(name):
     return _BtnEvent(name, "Keyboard")
 
 
-@unittest.skip("KeyboardModule disabled (not in MODULE_TYPES)")
 class TestKeyboardModule(unittest.TestCase):
     def setUp(self):
         self.m = KeyboardModule()

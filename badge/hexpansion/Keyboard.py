@@ -3,9 +3,9 @@ from .verbs import random_verb
 
 # Homophone pairs: the shouter sees the spelling, the typist only hears it.
 # Commands ARE the words — the token sent to the server is the word itself.
-WORDS = ("pores", "pours", "paws", "pause")
+WORDS = ("pores", "pours", "paws", "pause", "praise", "prays", "preys")
 
-TYPE_VERBS = ("Type", "Key in", "Spell")
+TYPE_VERBS = ("Type in", "Key in", "Punch in")
 
 # The buffer only ever needs to hold the longest word plus room to notice
 # junk immediately before it; bounding it keeps a round of frantic mashing
